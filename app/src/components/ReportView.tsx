@@ -1,0 +1,206 @@
+import dynamic from "next/dynamic";
+import type { AssessmentRecord } from "@/types/assessment";
+
+const MassingView = dynamic(() => import("@/components/MassingView").then((m) => m.MassingView), {
+  ssr: false,
+  loading: () => <div className="flex h-80 items-center justify-center rounded border bg-neutral-50 text-sm text-neutral-500">Loading 3D view…</div>,
+});
+
+function bandLabel(record: AssessmentRecord) {
+  const { score } = record;
+  if (!score.isBanded) return `${score.score} — ${score.bandLow}`;
+  return score.bandLow === score.bandHigh ? score.bandLow : `${score.bandHigh}–${score.bandLow}`;
+}
+
+export function ReportView({ record }: { record: AssessmentRecord }) {
+  const { siteProfile, planningControls, constraints, buildableEnvelope, pathway, score } = record;
+  // A wholly unresolved address has no lot/DP at all — distinct from an
+  // LGA name specifically missing from one layer's attributes (e.g. some
+  // SEPP-precinct-zoned parcels don't carry LGA_NAME) while the address
+  // otherwise resolved fine.
+  const isUnresolvedAddress = siteProfile.lotDp === null && siteProfile.lotSizeSqm === null;
+  const isLgaUnresolved = siteProfile.lga.toLowerCase().startsWith("unresolved");
+
+  return (
+    <div className="space-y-6 text-sm">
+      <div className="rounded border border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+        <strong>Live NSW data (partial coverage).</strong> Site ID, zoning/FSR/height, and bushfire come from live NSW
+        Spatial Services / ePlanning ArcGIS layers. Flood/acid-sulfate-soils/contamination/sewer/ANEF, slope, and DA
+        approval-rate history have no confirmed free live source yet and are honestly reported as unknown rather than
+        guessed — see Risks &amp; unknowns below.
+      </div>
+      {isUnresolvedAddress && (
+        <div className="rounded border border-red-400 bg-red-50 px-3 py-2 text-xs text-red-900">
+          This address could not be resolved against NSW property/cadastre data — every control and constraint below
+          is an unverified unknown, not a real lookup. The low score reflects that unresolved zoning is treated as a
+          hard gate, not an actual assessment of this property.
+        </div>
+      )}
+      {!isUnresolvedAddress && isLgaUnresolved && (
+        <div className="rounded border border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          The lot resolved correctly, but this parcel&apos;s zoning record didn&apos;t carry an LGA name (common for
+          precinct/growth-centre SEPP-zoned land) — verify the council via a Section 10.7 certificate.
+        </div>
+      )}
+      <header>
+        <h2 className="text-lg font-semibold">Pre-Approval Feasibility Report — {siteProfile.address}</h2>
+        <p className="mt-1">
+          <span className="font-medium">Verdict:</span> {bandLabel(record)} — recommended pathway:{" "}
+          <span className="uppercase">{pathway.pathway}</span>
+        </p>
+        {siteProfile.indicativeOnly && (
+          <p className="mt-1 text-amber-700">Indicative only — lot dimensions or registration not fully confirmed.</p>
+        )}
+      </header>
+
+      <section>
+        <h3 className="font-semibold">Site profile</h3>
+        <ul className="mt-1 list-disc pl-5">
+          <li>Lot/DP: {siteProfile.lotDp ?? "unregistered / unknown"}</li>
+          <li>LGA: {siteProfile.lga}</li>
+          <li>
+            EPI: {siteProfile.epiName} {siteProfile.epiAmendmentDate ? `(amended ${siteProfile.epiAmendmentDate})` : ""}
+          </li>
+          <li>
+            Lot size: {siteProfile.lotSizeSqm ?? "unknown"} m² · Frontage: {siteProfile.frontageM ?? "unknown"} m · Depth:{" "}
+            {siteProfile.depthM ?? "unknown"} m
+          </li>
+          <li>Registration: {siteProfile.registrationStatus}</li>
+          <li>
+            Slope: {siteProfile.slopeClass ?? "unknown"} ({siteProfile.slopePercent ?? "?"}%)
+          </li>
+          <li>Council tier: {siteProfile.councilTier.replace(/_/g, " ")}</li>
+        </ul>
+      </section>
+
+      <section>
+        <h3 className="font-semibold">Planning controls</h3>
+        <ul className="mt-1 list-disc pl-5">
+          <li>
+            Zone: {planningControls.zone} — {planningControls.zoneDescription}
+          </li>
+          <li>Min lot size: {planningControls.minLotSizeSqm ?? "verify via Planning Portal"} m²</li>
+          <li>FSR: {planningControls.fsr ?? "verify via Planning Portal"}</li>
+          <li>Height of buildings: {planningControls.heightOfBuildingM ?? "verify via Planning Portal"} m</li>
+          <li>Heritage item: {planningControls.heritageItem ? "yes" : "no"}</li>
+          <li>Heritage conservation area: {planningControls.heritageConservationArea ? "yes" : "no"}</li>
+        </ul>
+      </section>
+
+      <section>
+        <h3 className="font-semibold">Buildable envelope</h3>
+        {buildableEnvelope.envelopeAreaSqm !== null ? (
+          <p className="mt-1">
+            ~{buildableEnvelope.envelopeAreaSqm} m² ({buildableEnvelope.envelopeWidthM}m × {buildableEnvelope.envelopeDepthM}m)
+          </p>
+        ) : (
+          <p className="mt-1 text-amber-700">Cannot compute — lot dimensions unconfirmed.</p>
+        )}
+        {buildableEnvelope.targetFootprintFit && (
+          <p className="mt-1">
+            Target ({buildableEnvelope.targetFootprintFit.targetDescription}):{" "}
+            {buildableEnvelope.targetFootprintFit.fits ? "fits" : "does not fit"} — margin{" "}
+            {buildableEnvelope.targetFootprintFit.marginSqm} m²
+          </p>
+        )}
+        <ul className="mt-1 list-disc pl-5 text-xs text-neutral-600">
+          {buildableEnvelope.assumptions.map((a, i) => (
+            <li key={i}>{a}</li>
+          ))}
+        </ul>
+      </section>
+
+      <section>
+        <h3 className="font-semibold">3D massing (indicative)</h3>
+        <MassingView record={record} />
+      </section>
+
+      <section>
+        <h3 className="font-semibold">Constraints</h3>
+        <table className="mt-1 w-full border-collapse text-left text-xs">
+          <thead>
+            <tr className="border-b">
+              <th className="py-1 pr-2">Constraint</th>
+              <th className="py-1 pr-2">Present</th>
+              <th className="py-1 pr-2">Classification</th>
+              <th className="py-1">Rationale</th>
+            </tr>
+          </thead>
+          <tbody>
+            {constraints.map((c) => (
+              <tr key={c.name} className="border-b align-top">
+                <td className="py-1 pr-2 font-medium">{c.name}</td>
+                <td className="py-1 pr-2">{c.present ? "yes" : "no"}</td>
+                <td className="py-1 pr-2">{c.classification}</td>
+                <td className="py-1">{c.rationale}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h3 className="font-semibold">Site cost signals</h3>
+        <ul className="mt-1 list-disc pl-5">
+          {record.costSignals.map((c, i) => (
+            <li key={i}>{c}</li>
+          ))}
+        </ul>
+      </section>
+
+      <section>
+        <h3 className="font-semibold">Approval pathway & timeline</h3>
+        <p className="mt-1">{pathway.reasoning}</p>
+        <p className="mt-1">Indicative timeline: {pathway.indicativeTimelineDays}</p>
+        {pathway.cdcExclusionTriggers.length > 0 && (
+          <ul className="mt-1 list-disc pl-5">
+            {pathway.cdcExclusionTriggers.map((t, i) => (
+              <li key={i}>{t}</li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section>
+        <h3 className="font-semibold">Approval likelihood — top drivers</h3>
+        <ul className="mt-1 list-disc pl-5">
+          {score.topDrivers.map((d, i) => (
+            <li key={i}>{d}</li>
+          ))}
+        </ul>
+      </section>
+
+      <section>
+        <h3 className="font-semibold">Document checklist</h3>
+        <ul className="mt-1 list-disc pl-5">
+          {record.documentChecklist.map((d, i) => (
+            <li key={i}>{d}</li>
+          ))}
+        </ul>
+      </section>
+
+      <section>
+        <h3 className="font-semibold">Risks & unknowns</h3>
+        <ul className="mt-1 list-disc pl-5">
+          {record.risksAndUnknowns.map((r, i) => (
+            <li key={i}>{r}</li>
+          ))}
+        </ul>
+      </section>
+
+      <section>
+        <h3 className="font-semibold">Next steps</h3>
+        <ol className="mt-1 list-decimal pl-5">
+          {record.nextSteps.map((s, i) => (
+            <li key={i}>{s}</li>
+          ))}
+        </ol>
+      </section>
+
+      <p className="border-t pt-3 text-xs text-neutral-500">
+        Not legal or planning advice. Planning controls change — verify current figures against the LEP, Codes SEPP, and
+        NSW Planning Portal, or via a Section 10.7 planning certificate, before making a purchase or build decision.
+      </p>
+    </div>
+  );
+}

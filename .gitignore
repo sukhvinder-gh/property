@@ -1,0 +1,19 @@
+# Environment / secrets — never commit real credentials
+.env
+.env.local
+.env.*.local
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Local Claude Code tool config — can accumulate recorded command strings
+# (including one-off tokens pasted into a command), so never track it.
+.claude/
+
+# Node (app/ has its own more complete .gitignore; this is a safety net)
+node_modules/
