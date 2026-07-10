@@ -9,7 +9,16 @@ import { runStage3Constraints } from "@/lib/pipeline/stage3-constraints";
 import { runStage4BuildableEnvelope } from "@/lib/pipeline/stage4-envelope";
 import { runStage5Pathway } from "@/lib/pipeline/stage5-pathway";
 import { runStage6Scoring } from "@/lib/pipeline/stage6-scoring";
-import { buildCostSignals, buildDocumentChecklist, buildNextSteps, buildRisksAndUnknowns } from "@/lib/pipeline/stage7-report";
+import {
+  buildCostSignals,
+  buildCouncilControls,
+  buildDevelopmentPotential,
+  buildDocumentChecklist,
+  buildFeasibilitySummary,
+  buildNextSteps,
+  buildRiskRegister,
+  buildRisksAndUnknowns,
+} from "@/lib/pipeline/stage7-report";
 import type { AssessmentRecord } from "@/types/assessment";
 
 const adapter = getDataSourceAdapter();
@@ -66,7 +75,11 @@ export const assessProperty = inngest.createFunction(
         const costSignals = buildCostSignals(constraints, siteProfile);
         const documentChecklist = buildDocumentChecklist(pathway, constraints);
         const risksAndUnknowns = buildRisksAndUnknowns(siteProfile, buildableEnvelope, constraints);
+        const riskRegister = buildRiskRegister(siteProfile, planningControls, constraints);
         const nextSteps = buildNextSteps(pathway, siteProfile);
+        const developmentPotential = buildDevelopmentPotential(siteProfile, planningControls);
+        const councilControls = buildCouncilControls(siteProfile, planningControls, councilProfile);
+        const feasibilitySummary = buildFeasibilitySummary(siteProfile, planningControls, constraints, buildableEnvelope, pathway, score);
 
         return {
           id: assessmentId,
@@ -75,11 +88,15 @@ export const assessProperty = inngest.createFunction(
           planningControls,
           constraints,
           buildableEnvelope,
+          developmentPotential,
+          councilControls,
           pathway,
           score,
+          feasibilitySummary,
           costSignals,
           documentChecklist,
           risksAndUnknowns,
+          riskRegister,
           nextSteps,
         };
       })) as AssessmentRecord;

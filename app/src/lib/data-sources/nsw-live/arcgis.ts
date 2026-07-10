@@ -108,6 +108,60 @@ export function boundingBoxDims(feature: ArcGisFeature | undefined): { width: nu
 }
 
 /**
+ * Real min/max corner coordinates of the outer ring's bounding box (unlike
+ * boundingBoxDims, which only returns width/height) — used to pick two real
+ * sample points for elevation lookups.
+ */
+export function polygonBoundingBoxCorners(
+  feature: ArcGisFeature | undefined
+): { min: { x: number; y: number }; max: { x: number; y: number } } | null {
+  const ring = feature?.geometry?.rings?.[0];
+  if (!ring || ring.length === 0) return null;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const [x, y] of ring) {
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+  return { min: { x: minX, y: minY }, max: { x: maxX, y: maxY } };
+}
+
+/**
+ * Identify operation for ArcGIS ImageServer (pixel/raster) endpoints — a
+ * different REST operation from queryArcGis's /query (feature layers).
+ * Verified live 2026-07: the point geometry must be JSON-encoded with an
+ * explicit spatialReference — a bare "x,y" + separate sr param returns
+ * "NoData" even for a valid point. Returns null for "NoData"/non-numeric
+ * (degrade to unknown, never guess).
+ */
+export async function identifyImagePixel(serviceUrl: string, point: { x: number; y: number }): Promise<number | null> {
+  const url = new URL(`${serviceUrl}/identify`);
+  url.searchParams.set("f", "json");
+  url.searchParams.set("geometryType", "esriGeometryPoint");
+  url.searchParams.set("returnGeometry", "false");
+  url.searchParams.set("geometry", JSON.stringify({ x: point.x, y: point.y, spatialReference: { wkid: OUT_SR } }));
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(url.toString(), { signal: controller.signal });
+    if (!res.ok) throw new Error(`ArcGIS identify failed (${res.status}): ${serviceUrl}`);
+    const json = await res.json();
+    if (json.error) throw new Error(`ArcGIS error: ${JSON.stringify(json.error)}`);
+    const value = json.value;
+    if (typeof value !== "string" || value === "NoData") return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
  * Outer ring re-based to local metres around a given origin (typically the
  * polygon's own centroid) — the source CRS (GDA94 MGA Zone 56) is already
  * metric and true-north-aligned, so this is a plain translation, no rotation
@@ -117,4 +171,17 @@ export function polygonToLocalPoints(feature: ArcGisFeature | undefined, origin:
   const ring = feature?.geometry?.rings?.[0];
   if (!ring || ring.length === 0) return null;
   return ring.map(([x, y]) => ({ x: x - origin.x, y: y - origin.y }));
+}
+
+/**
+ * All rings re-based to local metres around a given origin — unlike
+ * polygonToLocalPoints (single ring, fine for cadastre lots), overlay/hazard
+ * features can have multiple rings (verified live: a sample bushfire feature
+ * had 3). Each ring is treated as an independent filled patch by callers —
+ * true donut-hole semantics from winding order are not resolved here.
+ */
+export function polygonToLocalRings(feature: ArcGisFeature | undefined, origin: { x: number; y: number }): { x: number; y: number }[][] | null {
+  const rings = feature?.geometry?.rings;
+  if (!rings || rings.length === 0) return null;
+  return rings.map((ring) => ring.map(([x, y]) => ({ x: x - origin.x, y: y - origin.y })));
 }

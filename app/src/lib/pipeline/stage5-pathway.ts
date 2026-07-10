@@ -1,7 +1,10 @@
+import { SECONDARY_DWELLING_MIN_FRONTAGE_M, SECONDARY_DWELLING_MIN_LOT_SQM } from "@/lib/pipeline/codes-sepp-constants";
 import type { Constraint, Pathway, PlanningControls, SiteProfile } from "@/types/assessment";
 
-const ASSUMED_CDC_MIN_LOT_SQM = 450;
-const ASSUMED_CDC_MIN_FRONTAGE_M = 12;
+// Coincides with the Housing SEPP secondary-dwelling minimums (see
+// codes-sepp-constants.ts) — shared so both only need updating in one place.
+const ASSUMED_CDC_MIN_LOT_SQM = SECONDARY_DWELLING_MIN_LOT_SQM;
+const ASSUMED_CDC_MIN_FRONTAGE_M = SECONDARY_DWELLING_MIN_FRONTAGE_M;
 
 export function runStage5Pathway(
   siteProfile: SiteProfile,

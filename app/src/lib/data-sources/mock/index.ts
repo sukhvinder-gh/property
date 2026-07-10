@@ -203,6 +203,29 @@ function rectanglePolygon(frontageM: number, depthM: number): { x: number; y: nu
   ];
 }
 
+/** Synthetic demo overlay patch covering roughly a third of the lot — not a real
+ * hazard/heritage boundary, just illustrative shape for the mock data path. */
+function partialLotRect(frontageM: number, depthM: number, edge: "right" | "rear"): { x: number; y: number }[] {
+  const hw = frontageM / 2;
+  const hd = depthM / 2;
+  if (edge === "right") {
+    const xStart = hw - frontageM / 3;
+    return [
+      { x: xStart, y: -hd },
+      { x: hw, y: -hd },
+      { x: hw, y: hd },
+      { x: xStart, y: hd },
+    ];
+  }
+  const yStart = hd - depthM / 3;
+  return [
+    { x: -hw, y: yStart },
+    { x: hw, y: yStart },
+    { x: hw, y: hd },
+    { x: -hw, y: hd },
+  ];
+}
+
 export class MockDataSourceAdapter implements DataSourceAdapter {
   isCouncilProfiled(lga: string): boolean {
     return isCouncilProfiled(lga);
@@ -274,6 +297,7 @@ export class MockDataSourceAdapter implements DataSourceAdapter {
         heritageItem: false,
         heritageConservationArea: false,
         biodiversityOverlay: false,
+        heritageZoneRings: null,
         provenance: {
           source: "NSW ePlanning Spatial Viewer — no fixture for this LGA",
           retrievedAt: nowIso(),
@@ -289,6 +313,8 @@ export class MockDataSourceAdapter implements DataSourceAdapter {
       heritageItem: f.heritageItem,
       heritageConservationArea: f.heritageConservationArea,
       biodiversityOverlay: f.biodiversityOverlay,
+      // Synthetic demo shape only — mock fixtures have no real heritage boundary.
+      heritageZoneRings: f.heritageItem || f.heritageConservationArea ? [partialLotRect(f.frontageM, f.depthM, "right")] : null,
       provenance: {
         source: "NSW ePlanning Spatial Viewer — mock fixture",
         layerOrEpi: f.epiName,
@@ -303,9 +329,18 @@ export class MockDataSourceAdapter implements DataSourceAdapter {
       floodControlLot: f?.floodControlLot ?? false,
       bushfireProneLand: f?.bushfireProneLand ?? false,
       acidSulfateSoils: f?.acidSulfateSoils ?? false,
+      acidSulfateSoilsClass: null,
       contamination: f?.contamination ?? false,
       hasSewerEasement: f?.hasSewerEasement ?? false,
       aircraftNoiseAnef: f?.aircraftNoiseAnef ?? false,
+      anefContourBand: null,
+      // No mock fixture represents a real coalfield or coastal address.
+      mineSubsidenceDistrict: false,
+      mineSubsidenceDistrictName: null,
+      coastalManagementArea: false,
+      coastalManagementAreaType: null,
+      // Synthetic demo shape only — no real hazard boundary in mock fixtures.
+      bushfireZoneRings: f?.bushfireProneLand ? [partialLotRect(f.frontageM, f.depthM, "rear")] : null,
       provenance: {
         source: f
           ? "Planning Portal constraint layers (flood/BPL/ASS) — mock fixture"

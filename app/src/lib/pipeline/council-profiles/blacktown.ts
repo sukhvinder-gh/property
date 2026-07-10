@@ -19,4 +19,19 @@ export const blacktownProfile: CouncilProfile = {
     "Front/side setbacks (6m / 0.9m) happen to match this engine's generic statewide assumption; the rear setback (3m, upper storey) is tighter than the generic 6m default — ground-floor-only rear elements can go to 0.9m.",
     "Stanhope Gardens precinct has a reduced 4.5m front setback — not modelled here; verify separately if the lot falls in that precinct.",
   ],
+  streetscapeCharacter: {
+    summary:
+      'General DCP objective: "encourage high quality development that contributes to the existing or desired future character of the area, with particular emphasis on the integration of buildings with a landscaped setting."',
+    instrumentRef: "Blacktown DCP 2015 §1.4(e)",
+  },
+  stormwaterPolicy: {
+    summary:
+      "Development plans must include a drainage plan showing the proposed means of connecting stormwater discharge into an acceptable drainage system; larger developments also engage Part J (Water Sensitive Urban Design / Integrated Water Cycle Management).",
+    instrumentRef: "Blacktown DCP 2015 §2.2, Part J",
+  },
+  treePreservation: {
+    summary:
+      "Ties into \"prescribed trees\" under Blacktown LEP 2015 cl 5.9 — existing trees are to be preserved where feasible; changing ground levels near retained trees should be avoided, with retaining walls preferred over filling around root zones.",
+    instrumentRef: "Blacktown DCP 2015 §4.3 / Blacktown LEP 2015 cl 5.9",
+  },
 };

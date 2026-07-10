@@ -1,4 +1,164 @@
-import type { BuildableEnvelope, Constraint, Pathway, SiteProfile } from "@/types/assessment";
+import { SECONDARY_DWELLING_MIN_FRONTAGE_M, SECONDARY_DWELLING_MIN_LOT_SQM } from "@/lib/pipeline/codes-sepp-constants";
+import type { CouncilProfile } from "@/lib/pipeline/council-profiles";
+import type {
+  BuildableEnvelope,
+  Constraint,
+  CouncilControlsSummary,
+  DevelopmentPotential,
+  FeasibilitySummary,
+  Pathway,
+  PlanningControls,
+  RiskRegisterEntry,
+  ScoreResult,
+  SiteProfile,
+} from "@/types/assessment";
+
+// Statewide facts, true regardless of whether a deep council profile exists —
+// see docs/property-pre-approval-engine research notes: Standard Instrument
+// LEP cl 5.9 is present in nearly every NSW LEP, and view-sharing principles
+// (Tenacity v Waverley) are practically only invoked by coastal/harbour councils.
+const TREE_PRESERVATION_STATEWIDE_NOTE =
+  "Nearly all NSW LEPs include Standard Instrument clause 5.9 \"Preservation of trees or vegetation\" (Standard Instrument (Local Environmental Plans) Order 2006), prohibiting ringbarking/cutting/removal of council-\"prescribed\" trees or vegetation without consent. The specific species/size/location thresholds that count as \"prescribed\" are set by each council's own DCP and are not uniform statewide.";
+
+const VIEW_SHARING_GENERIC_NOTE =
+  "View-sharing provisions (the planning principles from Tenacity v Waverley) are typically only invoked by coastal/harbour-foreshore councils assessing view-loss objections — not modelled per-council here; check the applicable council's DCP if the site has a significant view line.";
+
+function heritageControlText(planningControls: PlanningControls): string {
+  if (planningControls.heritageItem && planningControls.heritageConservationArea) {
+    return "This lot is both a listed heritage item and within a heritage conservation area — a heritage impact statement is required; a DA (not CDC) pathway applies.";
+  }
+  if (planningControls.heritageItem) {
+    return "This lot is a listed heritage item — a heritage impact statement is required; a DA (not CDC) pathway applies.";
+  }
+  if (planningControls.heritageConservationArea) {
+    return "This lot sits within a heritage conservation area — character/streetscape compatibility will be assessed; a DA (not CDC) pathway applies.";
+  }
+  return "No heritage item or conservation area mapped for this lot (live ePlanning heritage layer).";
+}
+
+export function buildCouncilControls(
+  siteProfile: SiteProfile,
+  planningControls: PlanningControls,
+  councilProfile?: CouncilProfile | null
+): CouncilControlsSummary {
+  return {
+    lepName: siteProfile.epiName,
+    dcpName: councilProfile?.instrumentName ?? null,
+    heritage: heritageControlText(planningControls),
+    characterAndStreetscape: councilProfile?.streetscapeCharacter
+      ? `${councilProfile.streetscapeCharacter.summary} (${councilProfile.streetscapeCharacter.instrumentRef})`
+      : "Not deep-profiled in this engine — verify character/streetscape expectations via the applicable council DCP or a pre-DA meeting.",
+    treePreservation: councilProfile?.treePreservation
+      ? `${councilProfile.treePreservation.summary} (${councilProfile.treePreservation.instrumentRef})`
+      : TREE_PRESERVATION_STATEWIDE_NOTE,
+    stormwaterPolicy: councilProfile?.stormwaterPolicy
+      ? `${councilProfile.stormwaterPolicy.summary} (${councilProfile.stormwaterPolicy.instrumentRef})`
+      : "Not deep-profiled in this engine — a stormwater/on-site detention (OSD) concept plan is required under the Codes SEPP/council DCP for most dwellings; verify the specific council's engineering DCP chapter.",
+    viewSharing: councilProfile?.viewSharing
+      ? `${councilProfile.viewSharing.summary} (${councilProfile.viewSharing.instrumentRef})`
+      : VIEW_SHARING_GENERIC_NOTE,
+  };
+}
+
+// Mitigation text for each real, present constraint name (from stage3-constraints.ts).
+// Kept separate from buildCostSignals' phrasing (a cost flag) — this is framed
+// as an action to take, matching the professional risk-register convention.
+const CONSTRAINT_MITIGATIONS: Record<string, string> = {
+  "Flood planning area / flood control lot":
+    "Commission a flood study; raise finished floor levels to the flood planning level and budget for on-site detention (OSD).",
+  "Bushfire prone land": "Commission a bushfire assessment / Bushfire Attack Level (BAL) rating before finalising design.",
+  "Acid sulfate soils": "Commission an acid sulfate soil management plan before any excavation.",
+  Contamination: "Commission a contamination assessment and remediation/validation report before lodging.",
+  "Sewer main / easement": "Confirm exact easement location and width from title documents; may require Sydney Water build-over-sewer approval.",
+  "Aircraft noise (ANEF)": "Confirm acoustic construction requirements against the current ANEF contour before design.",
+  "Topography / slope": "Commission a geotechnical assessment; budget for retaining walls and/or cut-fill.",
+  "Mine subsidence district": "Contact Subsidence Advisory NSW / the Mine Subsidence Board before design; budget for additional footing and structural engineering.",
+  "Coastal management SEPP area": "Confirm referral/consent requirements under the Coastal Management SEPP; commission a coastal engineer if near a wetland or the shoreline.",
+};
+
+export function buildRiskRegister(
+  siteProfile: SiteProfile,
+  planningControls: PlanningControls,
+  constraints: Constraint[]
+): RiskRegisterEntry[] {
+  const isUnresolvedAddress = siteProfile.lotDp === null && siteProfile.lotSizeSqm === null;
+  if (isUnresolvedAddress) {
+    return [
+      {
+        risk: "Address unresolved",
+        impact: "high",
+        mitigation:
+          "Confirm the correct address, lot, and DP via an NSW Property/cadastre search or title document — nothing else in this report has been verified against real data.",
+      },
+    ];
+  }
+
+  const register: RiskRegisterEntry[] = [];
+
+  if (planningControls.heritageItem) {
+    register.push({
+      risk: "Heritage item",
+      impact: "high",
+      mitigation:
+        "Engage a heritage consultant early; a DA (not CDC) generally applies and design must respond to the item's statement of significance.",
+    });
+  }
+  if (planningControls.heritageConservationArea) {
+    register.push({
+      risk: "Heritage conservation area",
+      impact: "high",
+      mitigation: "Engage a heritage consultant early; check the HCA's specific DCP character/streetscape controls before design.",
+    });
+  }
+
+  // classification already reflects how the engine treats each constraint
+  // elsewhere (scoring weight, CDC exclusion) — reused here rather than
+  // inventing a second, inconsistent severity scale.
+  const impactForClassification: Record<Constraint["classification"], RiskRegisterEntry["impact"]> = {
+    blocker: "high",
+    "cost-adder": "medium",
+    "documentation-adder": "low",
+  };
+  for (const c of constraints) {
+    if (!c.present) continue;
+    register.push({
+      risk: c.name,
+      impact: impactForClassification[c.classification],
+      mitigation: CONSTRAINT_MITIGATIONS[c.name] ?? "Verify via a specialist report before relying on this.",
+    });
+  }
+
+  if (siteProfile.registrationStatus === "unregistered") {
+    register.push({
+      risk: "Lot is unregistered",
+      impact: "high",
+      mitigation: "Confirm estimated registration date with the developer/estate agent — a CDC generally cannot be issued until the lot is registered.",
+    });
+  }
+  if (siteProfile.indicativeOnly) {
+    register.push({
+      risk: "Lot dimensions not fully confirmed",
+      impact: "medium",
+      mitigation: "Verify exact lot dimensions via a registered survey or a Section 10.7 planning certificate before relying on this report.",
+    });
+  }
+  if (siteProfile.lotSizeSqm !== null && siteProfile.lotSizeSqm > 2000) {
+    register.push({
+      risk: "Unusually large recorded lot size (possible unsubdivided \"superlot\")",
+      impact: "medium",
+      mitigation: "Verify actual house-block dimensions via the estate's registered plan of subdivision or a current title search.",
+    });
+  }
+  if (siteProfile.councilTier !== "profiled") {
+    register.push({
+      risk: "Council DCP compliance culture unmodelled",
+      impact: "low",
+      mitigation: "Book a council pre-DA meeting to confirm how strictly this council applies its DCP controls in practice.",
+    });
+  }
+
+  return register;
+}
 
 export function buildCostSignals(constraints: Constraint[], siteProfile: SiteProfile): string[] {
   const signals: string[] = [];
@@ -18,6 +178,10 @@ export function buildCostSignals(constraints: Constraint[], siteProfile: SitePro
       signals.push("Soil: acid sulfate soil management plan likely required for excavation.");
     } else if (c.name.startsWith("Contamination")) {
       signals.push("Contamination: remediation/validation likely required before consent.");
+    } else if (c.name.startsWith("Mine subsidence")) {
+      signals.push("Mine subsidence: additional footings/engineering design and Mine Subsidence Board approval likely required.");
+    } else if (c.name.startsWith("Coastal management")) {
+      signals.push("Coastal: additional referral/consent requirements likely apply (Coastal Management SEPP).");
     }
   }
   signals.push("Demolition/tree removal: confirm via aerial imagery or site inspection — not assessed from spatial layers alone.");
@@ -38,6 +202,12 @@ export function buildDocumentChecklist(pathway: Pathway, constraints: Constraint
   }
   if (constraints.find((c) => c.name.startsWith("Topography") && c.present)) {
     docs.add("Arborist report (if tree removal required) and geotechnical/site classification report");
+  }
+  if (constraints.find((c) => c.name.startsWith("Mine subsidence") && c.present)) {
+    docs.add("Mine Subsidence Board approval");
+  }
+  if (constraints.find((c) => c.name.startsWith("Coastal management") && c.present)) {
+    docs.add("Coastal risk or referral assessment");
   }
   docs.add("Waste management plan");
   docs.add("Section 10.7 (planning certificate)");
@@ -71,7 +241,53 @@ export function buildRisksAndUnknowns(
   if (easementConstraint?.present) {
     risks.push("Easement geometry sourced from a flag, not the parsed DP — confirm exact easement location and width from title documents.");
   }
+  risks.push(
+    "Restrictive covenants, rights of carriageway, encroachments, existing structures, boundary fencing, and significant individual trees are not visible from any spatial layer this engine checks — confirm via a title search (Section 10.7 certificate + title/DP) and a site survey before relying on this report for these items."
+  );
+  risks.push(
+    "Slope/levels above are a DEM-derived estimate (5m resolution), not a surveyed cross-section — exact levels, existing service locations, existing tree locations, and neighbouring structures still require a registered surveyor's detail/boundary survey."
+  );
   return risks;
+}
+
+export function buildDevelopmentPotential(siteProfile: SiteProfile, planningControls: PlanningControls): DevelopmentPotential {
+  const zonePermitsResidential = /^R/.test(planningControls.zone); // same check as stage6-scoring.ts's hard gate
+
+  let secondaryEligible: boolean | null = null;
+  let secondaryReasoning: string;
+  if (siteProfile.lotSizeSqm === null || siteProfile.frontageM === null) {
+    secondaryReasoning = "Insufficient data (lot size and/or frontage unconfirmed) to determine secondary dwelling eligibility.";
+  } else if (!zonePermitsResidential) {
+    secondaryEligible = false;
+    secondaryReasoning = `Zone ${planningControls.zone} does not read as a standard residential zone — secondary dwellings are a residential-zone CDC pathway.`;
+  } else {
+    secondaryEligible = siteProfile.lotSizeSqm >= SECONDARY_DWELLING_MIN_LOT_SQM && siteProfile.frontageM >= SECONDARY_DWELLING_MIN_FRONTAGE_M;
+    secondaryReasoning = secondaryEligible
+      ? `Lot size ${siteProfile.lotSizeSqm}m² and frontage ${siteProfile.frontageM}m meet the NSW Housing SEPP 2021 CDC minimums (≥${SECONDARY_DWELLING_MIN_LOT_SQM}m², ≥${SECONDARY_DWELLING_MIN_FRONTAGE_M}m frontage, max 60m² dwelling) — verify current figures before relying on this.`
+      : `Lot size ${siteProfile.lotSizeSqm}m² or frontage ${siteProfile.frontageM}m falls short of the NSW Housing SEPP 2021 CDC minimums (≥${SECONDARY_DWELLING_MIN_LOT_SQM}m², ≥${SECONDARY_DWELLING_MIN_FRONTAGE_M}m frontage) — a secondary dwelling via CDC is unlikely, though a DA pathway may still be possible.`;
+  }
+
+  let potentialLots: number | null = null;
+  let subdivisionReasoning: string;
+  if (planningControls.minLotSizeSqm === null || siteProfile.lotSizeSqm === null) {
+    subdivisionReasoning = "Insufficient data (minimum lot size and/or actual lot size unconfirmed) to assess subdivision potential.";
+  } else {
+    potentialLots = Math.floor(siteProfile.lotSizeSqm / planningControls.minLotSizeSqm);
+    subdivisionReasoning =
+      potentialLots >= 2
+        ? `Lot area (${siteProfile.lotSizeSqm}m²) could support ${potentialLots} lots at the ${planningControls.minLotSizeSqm}m² LEP minimum — area only; this does not check per-lot frontage, battle-axe access-handle rules, or council DCP subdivision controls, any of which can independently block subdivision.`
+        : `Lot area (${siteProfile.lotSizeSqm}m²) does not support multiple lots at the ${planningControls.minLotSizeSqm}m² LEP minimum.`;
+  }
+
+  return {
+    secondaryDwelling: { eligible: secondaryEligible, reasoning: secondaryReasoning },
+    dualOccupancy: {
+      likelyPermitted: null,
+      reasoning:
+        "Dual-occupancy permissibility is set by each council's own LEP Land Use Table and varies materially between councils — never generalised from one LGA to another in this engine. Check the specific zone's permitted-use table for this LGA, or book a council pre-DA meeting.",
+    },
+    subdivision: { potentialLots, reasoning: subdivisionReasoning },
+  };
 }
 
 export function buildNextSteps(pathway: Pathway, siteProfile: SiteProfile): string[] {
@@ -88,4 +304,106 @@ export function buildNextSteps(pathway: Pathway, siteProfile: SiteProfile): stri
   }
   steps.push("Commission any flagged specialist reports (bushfire, flood, geotechnical) identified in the document checklist.");
   return steps;
+}
+
+export function buildFeasibilitySummary(
+  siteProfile: SiteProfile,
+  planningControls: PlanningControls,
+  constraints: Constraint[],
+  buildableEnvelope: BuildableEnvelope,
+  pathway: Pathway,
+  score: ScoreResult
+): FeasibilitySummary {
+  const isUnresolvedAddress = siteProfile.lotDp === null && siteProfile.lotSizeSqm === null;
+  const zonePermitsResidential = /^R/.test(planningControls.zone); // same check as stage6-scoring.ts's hard gate
+
+  if (isUnresolvedAddress) {
+    return {
+      planningFeasibility: "insufficient_data",
+      engineeringFeasibility: "insufficient_data",
+      constructionFeasibility: "insufficient_data",
+      financialFeasibility: "insufficient_data",
+      overallRiskRating: "unknown",
+      recommendation: "insufficient_data",
+      reasoning:
+        "This address could not be resolved against NSW property/cadastre data, so no control was actually looked up — every feasibility flag below is unknown, not a real assessment.",
+    };
+  }
+
+  const planningFeasibility: FeasibilitySummary["planningFeasibility"] =
+    planningControls.zone === "Unknown" ? "insufficient_data" : zonePermitsResidential ? "yes" : "no";
+
+  const engineeringFeasibility: FeasibilitySummary["engineeringFeasibility"] =
+    buildableEnvelope.envelopeAreaSqm === null
+      ? "insufficient_data"
+      : buildableEnvelope.targetFootprintFit && !buildableEnvelope.targetFootprintFit.fits
+        ? "no"
+        : "yes";
+
+  // Sections 4-5, 7, 10 of the professional Pre-DA framework (survey, geotechnical,
+  // site access, construction methodology) have no live data source integrated in
+  // this engine yet — reporting "yes" or "no" here would be exactly the kind of
+  // guess SKILL.md prohibits. Always insufficient_data until a real source exists.
+  const constructionFeasibility: FeasibilitySummary["constructionFeasibility"] = "insufficient_data";
+
+  // Land value, construction cost, and consultant/council fee data (Section 11)
+  // are not sourced live — costSignals are qualitative flags, not a verified
+  // dollar estimate, so a real financial feasibility verdict can't be computed here.
+  const financialFeasibility: FeasibilitySummary["financialFeasibility"] = "insufficient_data";
+
+  const blockers = constraints.filter((c) => c.present && c.classification === "blocker").length;
+  const costAdders = constraints.filter((c) => c.present && c.classification === "cost-adder").length;
+
+  let overallRiskRating: FeasibilitySummary["overallRiskRating"];
+  if (planningFeasibility === "insufficient_data") {
+    overallRiskRating = "unknown";
+  } else if (planningFeasibility === "no" || blockers >= 1) {
+    overallRiskRating = "high";
+  } else if (costAdders >= 2 || pathway.pathway === "da") {
+    overallRiskRating = "medium";
+  } else {
+    overallRiskRating = "low";
+  }
+
+  let recommendation: FeasibilitySummary["recommendation"];
+  if (planningFeasibility === "insufficient_data") {
+    recommendation = "insufficient_data";
+  } else if (planningFeasibility === "no") {
+    recommendation = "do_not_proceed";
+  } else if (overallRiskRating === "high" || engineeringFeasibility === "no") {
+    recommendation = "proceed_with_changes";
+  } else if (overallRiskRating === "medium") {
+    recommendation = "proceed_with_changes";
+  } else {
+    recommendation = "proceed";
+  }
+
+  const scoreDescription =
+    score.score !== null
+      ? `a score of ${score.score}/100 (${score.bandLow})`
+      : `a banded verdict of ${score.bandLow}-${score.bandHigh} (data-thin council, unscored)`;
+
+  let reasoning: string;
+  if (recommendation === "do_not_proceed") {
+    reasoning = `Zone ${planningControls.zone} (${planningControls.zoneDescription}) does not read as a standard residential zone — this is a hard planning blocker, not a cost or design issue. Verify permissibility via a Section 10.7 certificate before spending further on this site.`;
+  } else if (recommendation === "proceed_with_changes") {
+    const reasons: string[] = [];
+    if (blockers >= 1) reasons.push(`${blockers} blocking constraint(s) present`);
+    if (pathway.pathway === "da") reasons.push("a DA (not CDC) pathway applies");
+    if (engineeringFeasibility === "no") reasons.push("the stated target dwelling does not fit the buildable envelope");
+    if (costAdders >= 2) reasons.push(`${costAdders} cost-adding constraint(s) present`);
+    reasoning = `Planning permits the use and ${scoreDescription} suggests the site is workable, but ${reasons.join("; ")} — design changes and/or specialist reports are likely needed before this is a clean proceed. Construction and financial feasibility are not assessed here (no live geotechnical, site-access, or cost data source) — commission a builder/QS estimate and geotechnical report before committing.`;
+  } else {
+    reasoning = `Planning permits the use, no blocking constraints were found, and ${scoreDescription} — this reads as a workable site subject to normal due diligence. Construction and financial feasibility are still not assessed here (no live geotechnical, site-access, or cost data source) — commission a builder/QS estimate and geotechnical report before committing.`;
+  }
+
+  return {
+    planningFeasibility,
+    engineeringFeasibility,
+    constructionFeasibility,
+    financialFeasibility,
+    overallRiskRating,
+    recommendation,
+    reasoning,
+  };
 }

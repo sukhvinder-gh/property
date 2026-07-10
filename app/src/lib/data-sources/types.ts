@@ -29,6 +29,8 @@ export interface PlanningControlsResult {
   heritageItem: boolean;
   heritageConservationArea: boolean;
   biodiversityOverlay: boolean;
+  /** Real heritage item/HCA boundary (rings of local-metre points). Null when unavailable. */
+  heritageZoneRings: LotPolygonPoint[][] | null;
   provenance: Provenance;
 }
 
@@ -36,9 +38,21 @@ export interface ConstraintsResult {
   floodControlLot: boolean;
   bushfireProneLand: boolean;
   acidSulfateSoils: boolean;
+  /** Real ASS class label (e.g. "Class 4"). Null when not present/unavailable. */
+  acidSulfateSoilsClass: string | null;
   contamination: boolean;
   hasSewerEasement: boolean;
   aircraftNoiseAnef: boolean;
+  /** Real ANEF contour band (e.g. "25 - 30"). Null when not present/unavailable. */
+  anefContourBand: string | null;
+  mineSubsidenceDistrict: boolean;
+  /** Real district name (e.g. "LAKE MACQUARIE"). Null when not present/unavailable. */
+  mineSubsidenceDistrictName: string | null;
+  coastalManagementArea: boolean;
+  /** Which Coastal Management SEPP area type matched, e.g. "Coastal Wetlands". Null when not present. */
+  coastalManagementAreaType: string | null;
+  /** Real bushfire hazard-zone geometry (rings of local-metre points). Null when unavailable. */
+  bushfireZoneRings: LotPolygonPoint[][] | null;
   provenance: Provenance;
 }
 

@@ -12,6 +12,25 @@ function bandLabel(record: AssessmentRecord) {
   return score.bandLow === score.bandHigh ? score.bandLow : `${score.bandHigh}–${score.bandLow}`;
 }
 
+function feasibilityLabel(rating: string) {
+  if (rating === "yes") return "✅ Yes";
+  if (rating === "no") return "❌ No";
+  return "❔ Insufficient data";
+}
+
+function recommendationLabel(recommendation: string) {
+  switch (recommendation) {
+    case "proceed":
+      return "Proceed";
+    case "proceed_with_changes":
+      return "Proceed with changes";
+    case "do_not_proceed":
+      return "Do not proceed";
+    default:
+      return "Insufficient data";
+  }
+}
+
 export function ReportView({ record }: { record: AssessmentRecord }) {
   const { siteProfile, planningControls, constraints, buildableEnvelope, pathway, score } = record;
   // A wholly unresolved address has no lot/DP at all — distinct from an
@@ -24,10 +43,12 @@ export function ReportView({ record }: { record: AssessmentRecord }) {
   return (
     <div className="space-y-6 text-sm">
       <div className="rounded border border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-        <strong>Live NSW data (partial coverage).</strong> Site ID, zoning/FSR/height, and bushfire come from live NSW
-        Spatial Services / ePlanning ArcGIS layers. Flood/acid-sulfate-soils/contamination/sewer/ANEF, slope, and DA
-        approval-rate history have no confirmed free live source yet and are honestly reported as unknown rather than
-        guessed — see Risks &amp; unknowns below.
+        <strong>Live NSW data (partial coverage).</strong> Site ID, zoning/FSR/height, heritage, biodiversity, bushfire,
+        flood, acid sulfate soils, aircraft noise (ANEF), mine subsidence, and Coastal Management SEPP areas come from
+        live NSW Spatial Services / ePlanning ArcGIS layers. Slope is a live estimate from a 5m-resolution elevation
+        model, not a surveyed cross-section. Contamination, sewer easements, and DA approval-rate history have no
+        confirmed free live source yet and are honestly reported as unknown rather than guessed — see Risks &amp;
+        unknowns below.
       </div>
       {isUnresolvedAddress && (
         <div className="rounded border border-red-400 bg-red-50 px-3 py-2 text-xs text-red-900">
@@ -84,6 +105,44 @@ export function ReportView({ record }: { record: AssessmentRecord }) {
           <li>Height of buildings: {planningControls.heightOfBuildingM ?? "verify via Planning Portal"} m</li>
           <li>Heritage item: {planningControls.heritageItem ? "yes" : "no"}</li>
           <li>Heritage conservation area: {planningControls.heritageConservationArea ? "yes" : "no"}</li>
+        </ul>
+      </section>
+
+      <section>
+        <h3 className="font-semibold">Council controls</h3>
+        <ul className="mt-1 list-disc pl-5">
+          <li>LEP: {record.councilControls.lepName}</li>
+          <li>DCP: {record.councilControls.dcpName ?? "Not deep-profiled in this engine — locate via the council website"}</li>
+          <li>Heritage: {record.councilControls.heritage}</li>
+          <li>Character &amp; streetscape: {record.councilControls.characterAndStreetscape}</li>
+          <li>Tree preservation: {record.councilControls.treePreservation}</li>
+          <li>Stormwater policy: {record.councilControls.stormwaterPolicy}</li>
+          <li>View-sharing: {record.councilControls.viewSharing}</li>
+        </ul>
+      </section>
+
+      <section>
+        <h3 className="font-semibold">What you can likely build</h3>
+        <ul className="mt-1 list-disc pl-5">
+          <li>
+            Secondary dwelling (granny flat):{" "}
+            {record.developmentPotential.secondaryDwelling.eligible === null
+              ? "insufficient data"
+              : record.developmentPotential.secondaryDwelling.eligible
+                ? "likely eligible"
+                : "unlikely eligible"}{" "}
+            — {record.developmentPotential.secondaryDwelling.reasoning}
+          </li>
+          <li>
+            Dual occupancy: requires council-specific check — {record.developmentPotential.dualOccupancy.reasoning}
+          </li>
+          <li>
+            Subdivision:{" "}
+            {record.developmentPotential.subdivision.potentialLots === null
+              ? "insufficient data"
+              : `~${record.developmentPotential.subdivision.potentialLots} lot(s) at the LEP minimum`}{" "}
+            — {record.developmentPotential.subdivision.reasoning}
+          </li>
         </ul>
       </section>
 
@@ -189,12 +248,58 @@ export function ReportView({ record }: { record: AssessmentRecord }) {
       </section>
 
       <section>
+        <h3 className="font-semibold">Risk register</h3>
+        {record.riskRegister.length === 0 ? (
+          <p className="mt-1 text-neutral-600">
+            No material risks identified from the checks run — this does not mean the site is risk-free, only that no red
+            flags were found in the data sources checked.
+          </p>
+        ) : (
+          <table className="mt-1 w-full border-collapse text-left text-xs">
+            <thead>
+              <tr className="border-b">
+                <th className="py-1 pr-2">Risk</th>
+                <th className="py-1 pr-2">Impact</th>
+                <th className="py-1">Mitigation</th>
+              </tr>
+            </thead>
+            <tbody>
+              {record.riskRegister.map((r, i) => (
+                <tr key={i} className="border-b align-top">
+                  <td className="py-1 pr-2 font-medium">{r.risk}</td>
+                  <td className="py-1 pr-2 capitalize">{r.impact}</td>
+                  <td className="py-1">{r.mitigation}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section>
         <h3 className="font-semibold">Next steps</h3>
         <ol className="mt-1 list-decimal pl-5">
           {record.nextSteps.map((s, i) => (
             <li key={i}>{s}</li>
           ))}
         </ol>
+      </section>
+
+      <section className="rounded border px-3 py-2">
+        <h3 className="font-semibold">Feasibility summary</h3>
+        <ul className="mt-1 list-disc pl-5">
+          <li>Planning feasibility: {feasibilityLabel(record.feasibilitySummary.planningFeasibility)}</li>
+          <li>Engineering feasibility: {feasibilityLabel(record.feasibilitySummary.engineeringFeasibility)}</li>
+          <li>Construction feasibility: {feasibilityLabel(record.feasibilitySummary.constructionFeasibility)}</li>
+          <li>Financial feasibility: {feasibilityLabel(record.feasibilitySummary.financialFeasibility)}</li>
+        </ul>
+        <p className="mt-2">
+          <span className="font-medium">Overall risk rating:</span> {record.feasibilitySummary.overallRiskRating}
+        </p>
+        <p className="mt-1">
+          <span className="font-medium">Recommendation:</span> {recommendationLabel(record.feasibilitySummary.recommendation)}
+        </p>
+        <p className="mt-1 text-neutral-700">{record.feasibilitySummary.reasoning}</p>
       </section>
 
       <p className="border-t pt-3 text-xs text-neutral-500">

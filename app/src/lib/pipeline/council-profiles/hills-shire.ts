@@ -20,4 +20,24 @@ export const hillsShireProfile: CouncilProfile = {
     "Kellyville, Bella Vista, and Showground sit in Metro Northwest growth precincts (see references/councils.md) with distinct precinct controls. The 10m front setback above is the shire-wide Part B Section 2 default; Bella Vista Residential precinct areas are separately documented at 6m, and Kellyville/Rouse Hill growth-precinct land is likely governed by a separate Part D precinct DCP section not verified in this pass — do not treat 10m as authoritative for those specific precincts.",
     "E4 Environmental Living zoned or mapped 'pink-shaded' land has much tighter controls (30% site coverage, 70% landscaped) — not modelled; only the standard R2-style shire-wide figures are used here.",
   ],
+  // Tree preservation / streetscape / stormwater sourced 2026-07 directly from
+  // the actual Part C Section 3 - Landscaping PDF (in force 5 Nov 2019), which
+  // the user supplied after the council's site blocked direct WebFetch — this
+  // Section applies shire-wide (not one housing type), so it's safe to use for
+  // standard dwelling houses.
+  treePreservation: {
+    summary:
+      'A "tree" is defined (State Environmental Planning Policy (Vegetation in Non-Rural Areas) 2017, applied via DCP §2.4) as a perennial plant with a self-supporting woody stem with a spread >3m, height >6m, or trunk diameter >300mm at the base. A listed set of exempt species (e.g. Privet, Camphor Laurel <10m, Radiata Pine) may be removed without approval (§2.4). Council approval is NOT required to prune or remove any tree within 5m of an existing approved dwelling or ancillary structure (§2.4). Where approval is required, an equal or greater number of replacement trees must be planted (§3.2(d)), and trees to be retained must be fenced at the drip line during construction (§3.2(f)).',
+    instrumentRef: "The Hills DCP 2012 Part C Section 3 — Landscaping §2.4, §3.2",
+  },
+  streetscapeCharacter: {
+    summary:
+      'Council\'s stated intention is "to retain the predominantly natural landscapes by ensuring that new development does not have a negative impact on established streetscapes and natural environments" (§2.1); landscaping must "preserve and contribute to the Shire\'s environmental and visual character" (§1.2(i)). Street tree species/placement (where relevant) must follow §3.4.',
+    instrumentRef: "The Hills DCP 2012 Part C Section 3 — Landscaping §1.2, §2.1, §3.4",
+  },
+  stormwaterPolicy: {
+    summary:
+      "Landscape works must include provision for adequate drainage, including collection/dispersal of stormwater run-off and prevention of ponding or discharge onto adjoining properties (§3.5(a)). On-site detention (OSD) tanks/above-ground structures should not be located in the front setback — the preferred location is within or under the driveway; if placed under a landscaped area, a minimum 300mm soil cover is required over the tank (§3.5(e)).",
+    instrumentRef: "The Hills DCP 2012 Part C Section 3 — Landscaping §3.5",
+  },
 };
