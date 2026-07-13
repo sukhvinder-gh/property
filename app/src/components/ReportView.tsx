@@ -44,11 +44,12 @@ export function ReportView({ record }: { record: AssessmentRecord }) {
     <div className="space-y-6 text-sm">
       <div className="rounded border border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900">
         <strong>Live NSW data (partial coverage).</strong> Site ID, zoning/FSR/height, heritage, biodiversity, bushfire,
-        flood, acid sulfate soils, aircraft noise (ANEF), mine subsidence, and Coastal Management SEPP areas come from
-        live NSW Spatial Services / ePlanning ArcGIS layers. Slope is a live estimate from a 5m-resolution elevation
-        model, not a surveyed cross-section. Contamination, sewer easements, and DA approval-rate history have no
-        confirmed free live source yet and are honestly reported as unknown rather than guessed — see Risks &amp;
-        unknowns below.
+        flood, acid sulfate soils, aircraft noise (ANEF), mine subsidence, Coastal Management SEPP areas, groundwater
+        vulnerability, and salinity come from live NSW Spatial Services / ePlanning ArcGIS layers. Slope is a live
+        estimate from a 5m-resolution elevation model, and soil type is a regional soil-landscape classification —
+        neither is a substitute for a survey or geotechnical report. Contamination, sewer easements, and DA
+        approval-rate history have no confirmed free live source yet and are honestly reported as unknown rather than
+        guessed — see Risks &amp; unknowns below.
       </div>
       {isUnresolvedAddress && (
         <div className="rounded border border-red-400 bg-red-50 px-3 py-2 text-xs text-red-900">
@@ -90,6 +91,10 @@ export function ReportView({ record }: { record: AssessmentRecord }) {
           <li>
             Slope: {siteProfile.slopeClass ?? "unknown"} ({siteProfile.slopePercent ?? "?"}%)
           </li>
+          <li>
+            Soil type: {siteProfile.soilType ? `${siteProfile.soilType} (${siteProfile.soilTypeCode})` : "not mapped"} —
+            regional indicator only, not a geotechnical result
+          </li>
           <li>Council tier: {siteProfile.councilTier.replace(/_/g, " ")}</li>
         </ul>
       </section>
@@ -118,6 +123,24 @@ export function ReportView({ record }: { record: AssessmentRecord }) {
           <li>Tree preservation: {record.councilControls.treePreservation}</li>
           <li>Stormwater policy: {record.councilControls.stormwaterPolicy}</li>
           <li>View-sharing: {record.councilControls.viewSharing}</li>
+        </ul>
+      </section>
+
+      <section>
+        <h3 className="font-semibold">Utilities &amp; services</h3>
+        <ul className="mt-1 list-disc pl-5">
+          <li>Electricity distributor: {record.utilities.electricityDistributor}</li>
+          <li>{record.utilities.otherServicesNote}</li>
+        </ul>
+      </section>
+
+      <section>
+        <h3 className="font-semibold">Access</h3>
+        <ul className="mt-1 list-disc pl-5">
+          <li>Driveway gradient: {record.access.drivewayGradient}</li>
+          <li>Road frontage: {record.access.roadFrontage}</li>
+          <li>Vehicle crossover: {record.access.vehicleCrossover}</li>
+          <li>Waste &amp; construction access: {record.access.wasteAndConstructionAccess}</li>
         </ul>
       </section>
 

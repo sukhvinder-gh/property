@@ -4,6 +4,8 @@ import type {
   DataSourceAdapter,
   GeocodeResult,
   PlanningControlsResult,
+  RoadAccessResult,
+  SoilTypeResult,
   TopographyResult,
 } from "@/lib/data-sources/types";
 import { isCouncilProfiled } from "@/lib/pipeline/council-profiles";
@@ -285,6 +287,21 @@ export class MockDataSourceAdapter implements DataSourceAdapter {
     };
   }
 
+  async soilType(_lotDp: string | null, _lga: string): Promise<SoilTypeResult> {
+    return {
+      soilType: null,
+      soilTypeCode: null,
+      provenance: { source: "NSW Great Soil Group (GSG) Soil Type map — mock fixture, soil type not modelled", retrievedAt: nowIso() },
+    };
+  }
+
+  async roadAccess(_lotDp: string | null, _lga: string): Promise<RoadAccessResult> {
+    return {
+      nearbyClassifiedRoad: null,
+      provenance: { source: "NSW classified-road layer (Roads_Primary) — mock fixture, road classification not modelled", retrievedAt: nowIso() },
+    };
+  }
+
   async planningControls(_lotDp: string | null, lga: string, _epiName: string): Promise<PlanningControlsResult> {
     const f = ALL_FIXTURES.find((x) => x.lga === lga);
     if (!f) {
@@ -339,6 +356,8 @@ export class MockDataSourceAdapter implements DataSourceAdapter {
       mineSubsidenceDistrictName: null,
       coastalManagementArea: false,
       coastalManagementAreaType: null,
+      groundwaterVulnerability: false,
+      salinity: false,
       // Synthetic demo shape only — no real hazard boundary in mock fixtures.
       bushfireZoneRings: f?.bushfireProneLand ? [partialLotRect(f.frontageM, f.depthM, "rear")] : null,
       provenance: {

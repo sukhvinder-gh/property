@@ -162,6 +162,43 @@ export async function identifyImagePixel(serviceUrl: string, point: { x: number;
 }
 
 /**
+ * Reprojects a point by piggybacking on an ArcGIS ImageServer identify
+ * operation's echoed "location" field, rather than implementing/trusting a
+ * hand-rolled UTM<->Web-Mercator conversion. Verified live 2026-07: a GDA94
+ * MGA Zone 56 point at ~151°E longitude reprojected to Web Mercator
+ * x≈16,807,820, matching the expected R×lon(rad) value (R=6378137) — the
+ * server's own reprojection, not a guessed formula. Returns null on any
+ * failure rather than falling back to an unverified conversion.
+ */
+export async function reprojectViaImageServer(
+  serviceUrl: string,
+  point: { x: number; y: number },
+  fromWkid: number
+): Promise<{ x: number; y: number } | null> {
+  const url = new URL(`${serviceUrl}/identify`);
+  url.searchParams.set("f", "json");
+  url.searchParams.set("geometryType", "esriGeometryPoint");
+  url.searchParams.set("returnGeometry", "false");
+  url.searchParams.set("geometry", JSON.stringify({ x: point.x, y: point.y, spatialReference: { wkid: fromWkid } }));
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(url.toString(), { signal: controller.signal });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (json.error) return null;
+    const loc = json.location;
+    if (!loc || typeof loc.x !== "number" || typeof loc.y !== "number") return null;
+    return { x: loc.x, y: loc.y };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
  * Outer ring re-based to local metres around a given origin (typically the
  * polygon's own centroid) — the source CRS (GDA94 MGA Zone 56) is already
  * metric and true-north-aligned, so this is a plain translation, no rotation

@@ -14,6 +14,8 @@ export async function runStage1SiteIdentification(
 ): Promise<SiteProfile> {
   const geo = await adapter.geocode(address);
   const topo = await adapter.topography(geo.lotDp, geo.lga);
+  const soil = await adapter.soilType(geo.lotDp, geo.lga);
+  const road = await adapter.roadAccess(geo.lotDp, geo.lga);
 
   const councilTier: CouncilTier = adapter.isCouncilProfiled(geo.lga)
     ? "profiled"
@@ -36,7 +38,10 @@ export async function runStage1SiteIdentification(
     councilTier,
     slopeClass: classifySlope(topo.slopePercent),
     slopePercent: topo.slopePercent,
+    soilType: soil.soilType,
+    soilTypeCode: soil.soilTypeCode,
+    nearbyClassifiedRoad: road.nearbyClassifiedRoad,
     indicativeOnly: dimensionsUnknown || geo.registrationStatus === "unregistered",
-    provenance: [geo.provenance, topo.provenance],
+    provenance: [geo.provenance, topo.provenance, soil.provenance, road.provenance],
   };
 }

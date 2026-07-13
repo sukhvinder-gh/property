@@ -10,6 +10,7 @@ import { runStage4BuildableEnvelope } from "@/lib/pipeline/stage4-envelope";
 import { runStage5Pathway } from "@/lib/pipeline/stage5-pathway";
 import { runStage6Scoring } from "@/lib/pipeline/stage6-scoring";
 import {
+  buildAccessSummary,
   buildCostSignals,
   buildCouncilControls,
   buildDevelopmentPotential,
@@ -18,6 +19,7 @@ import {
   buildNextSteps,
   buildRiskRegister,
   buildRisksAndUnknowns,
+  buildUtilitiesSummary,
 } from "@/lib/pipeline/stage7-report";
 import type { AssessmentRecord } from "@/types/assessment";
 
@@ -79,6 +81,8 @@ export const assessProperty = inngest.createFunction(
         const nextSteps = buildNextSteps(pathway, siteProfile);
         const developmentPotential = buildDevelopmentPotential(siteProfile, planningControls);
         const councilControls = buildCouncilControls(siteProfile, planningControls, councilProfile);
+        const utilities = buildUtilitiesSummary(siteProfile);
+        const access = buildAccessSummary(siteProfile);
         const feasibilitySummary = buildFeasibilitySummary(siteProfile, planningControls, constraints, buildableEnvelope, pathway, score);
 
         return {
@@ -90,6 +94,8 @@ export const assessProperty = inngest.createFunction(
           buildableEnvelope,
           developmentPotential,
           councilControls,
+          utilities,
+          access,
           pathway,
           score,
           feasibilitySummary,

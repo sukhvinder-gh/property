@@ -4,6 +4,8 @@ import type {
   DataSourceAdapter,
   GeocodeResult,
   PlanningControlsResult,
+  RoadAccessResult,
+  SoilTypeResult,
   TopographyResult,
 } from "@/lib/data-sources/types";
 import {
@@ -16,6 +18,7 @@ import {
   polygonToLocalPoints,
   polygonToLocalRings,
   identifyImagePixel,
+  reprojectViaImageServer,
   type ArcGisFeature,
 } from "@/lib/data-sources/nsw-live/arcgis";
 import { parseAddress } from "@/lib/data-sources/nsw-live/address-parser";
@@ -44,6 +47,7 @@ import { isCouncilProfiled } from "@/lib/pipeline/council-profiles";
 const PROPERTY_SERVICE = "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Property/MapServer";
 const PROPERTY_LAYER_IDS = [1, 2, 3, 4]; // Large_Rural, Rural, Semi_Rural, Urban
 const CADASTRE_SERVICE = "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Cadastre/MapServer/9";
+const LGA_LAYER = "https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Administrative_Boundaries_Theme/MapServer/8";
 const ELEVATION_SERVICE = "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_5M_Elevation/ImageServer";
 const PLANNING_SERVICE = "https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/Principal_Planning_Layers/MapServer";
 const ZONING_LAYER = `${PLANNING_SERVICE}/11`;
@@ -64,6 +68,26 @@ const COASTAL_SERVICE = "https://mapprod1.environment.nsw.gov.au/arcgis/rest/ser
 const COASTAL_WETLANDS_LAYER = `${COASTAL_SERVICE}/1`;
 const COASTAL_ENV_AREA_LAYER = `${COASTAL_SERVICE}/6`;
 const COASTAL_USE_AREA_LAYER = `${COASTAL_SERVICE}/7`;
+const GROUNDWATER_LAYER = `${PROTECTION_SERVICE}/237`;
+const SALINITY_LAYER = `${PROTECTION_SERVICE}/241`;
+const SOIL_SERVICE = "https://mapprod1.environment.nsw.gov.au/arcgis/rest/services/Soil/Soils_GSG_SoilTypes_EDP/MapServer/2";
+const ROADS_LAYER = "https://maps.six.nsw.gov.au/arcgis/rest/services/sixmaps/LPIMap/MapServer/55";
+const ROADS_LAYER_SR = 102100; // native storage SR — verified live 2026-07 that this layer silently returns empty results when queried in 28356
+const ROAD_PROXIMITY_BUFFER_M = 40;
+// Verified live 2026-07 from the layer's own functionhierarchy coded-value domain.
+const FUNCTION_HIERARCHY_NAMES: Record<number, string> = {
+  1: "Motorway",
+  2: "Primary Road",
+  3: "Arterial Road",
+  4: "Sub-Arterial Road",
+  5: "Distributor Road",
+  6: "Local Road",
+  7: "Urban Service Lane",
+  8: "Vehicular Track",
+  9: "Path",
+  10: "Dedicated Busway",
+  11: "Access Way",
+};
 
 const UNRESOLVED_LGA = "Unresolved (NSW Planning Portal — address not matched)";
 
@@ -202,19 +226,27 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
     const centroid = polygonCentroid(property);
     if (!centroid) return unresolvedGeocode("property matched but no usable geometry returned");
 
-    const [cadastreFeatures, zoningFeatures] = await Promise.all([
+    const [cadastreFeatures, zoningFeatures, lgaFeatures] = await Promise.all([
       queryArcGis(CADASTRE_SERVICE, {
         ...pointQuery(centroid, "lotnumber,lotidstring,planlabel"),
         returnGeometry: "true",
       }).catch(() => [] as ArcGisFeature[]),
       queryArcGis(ZONING_LAYER, pointQuery(centroid, "LGA_NAME,EPI_NAME,COMMENCED_DATE")).catch(() => [] as ArcGisFeature[]),
+      queryArcGis(LGA_LAYER, pointQuery(centroid, "lganame")).catch(() => [] as ArcGisFeature[]),
     ]);
 
     const lotFeature = cadastreFeatures[0];
     const lotDp = (lotFeature?.attributes.lotidstring as string | undefined) ?? null;
 
     const zf = zoningFeatures[0];
-    const lga = zf?.attributes.LGA_NAME ? titleCase(zf.attributes.LGA_NAME as string) : UNRESOLVED_LGA;
+    // The zoning layer's own LGA_NAME is sometimes blank for SEPP growth-precinct
+    // land (e.g. "SEPP (Precincts—Central River City) 2021" records) — verified
+    // live 2026-07. The dedicated LocalGovernmentArea administrative-boundary
+    // layer resolves correctly even there, so it's the primary source; the
+    // zoning layer's attribute is only a fallback if that lookup fails.
+    const lgaLayerName = (lgaFeatures[0]?.attributes.lganame as string | undefined) || undefined;
+    const zoningLgaName = (zf?.attributes.LGA_NAME as string | undefined) || undefined;
+    const lga = lgaLayerName ? titleCase(lgaLayerName) : zoningLgaName ? titleCase(zoningLgaName) : UNRESOLVED_LGA;
     const epiName = (zf?.attributes.EPI_NAME as string | undefined) ?? "Unknown — verify via NSW Planning Portal";
     const commencedRaw = zf?.attributes.COMMENCED_DATE as number | undefined;
     const epiAmendmentDate = commencedRaw ? new Date(commencedRaw).toISOString().slice(0, 10) : null;
@@ -296,6 +328,86 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
     };
   }
 
+  async soilType(lotDp: string | null, _lga: string): Promise<SoilTypeResult> {
+    const point = await resolvePointForLot(lotDp);
+    if (!point) {
+      return {
+        soilType: null,
+        soilTypeCode: null,
+        provenance: { source: "No lot/DP to resolve — cannot look up soil type", retrievedAt: nowIso() },
+      };
+    }
+
+    const features = await queryArcGis(SOIL_SERVICE, pointQuery(point, "GSG_name,GSG_code")).catch(() => [] as ArcGisFeature[]);
+    const feature = features[0];
+
+    return {
+      soilType: (feature?.attributes.GSG_name as string | undefined) ?? null,
+      soilTypeCode: (feature?.attributes.GSG_code as string | undefined) ?? null,
+      provenance: {
+        source: feature
+          ? "NSW Great Soil Group (GSG) Soil Type map — live ArcGIS REST. Regional soil-landscape classification, not a parcel-specific geotechnical result — commission an AS2870 site classification report before finalising footing design."
+          : "NSW Great Soil Group (GSG) Soil Type map — no classification mapped for this lot (live ArcGIS REST)",
+        retrievedAt: nowIso(),
+      },
+    };
+  }
+
+  async roadAccess(lotDp: string | null, _lga: string): Promise<RoadAccessResult> {
+    const point = await resolvePointForLot(lotDp);
+    if (!point) {
+      return {
+        nearbyClassifiedRoad: null,
+        provenance: { source: "No lot/DP to resolve — cannot check road classification", retrievedAt: nowIso() },
+      };
+    }
+
+    const mercatorPoint = await reprojectViaImageServer(ELEVATION_SERVICE, point, 28356);
+    if (!mercatorPoint) {
+      return {
+        nearbyClassifiedRoad: null,
+        provenance: { source: "Could not reproject lot location for road-classification lookup", retrievedAt: nowIso() },
+      };
+    }
+
+    const envelope = {
+      xmin: mercatorPoint.x - ROAD_PROXIMITY_BUFFER_M,
+      ymin: mercatorPoint.y - ROAD_PROXIMITY_BUFFER_M,
+      xmax: mercatorPoint.x + ROAD_PROXIMITY_BUFFER_M,
+      ymax: mercatorPoint.y + ROAD_PROXIMITY_BUFFER_M,
+      spatialReference: { wkid: ROADS_LAYER_SR },
+    };
+    const features = await queryArcGis(ROADS_LAYER, {
+      geometry: JSON.stringify(envelope),
+      geometryType: "esriGeometryEnvelope",
+      spatialRel: "esriSpatialRelIntersects",
+      outFields: "functionhierarchy,roadnamestring",
+    }).catch(() => [] as ArcGisFeature[]);
+
+    // Lowest hierarchy code = busiest road (1 Motorway ... 11 Access Way) —
+    // surface the busiest one found within the buffer.
+    let best: ArcGisFeature | undefined;
+    let bestCode = Infinity;
+    for (const f of features) {
+      const code = f.attributes.functionhierarchy as number | undefined;
+      if (typeof code === "number" && code < bestCode) {
+        bestCode = code;
+        best = f;
+      }
+    }
+    const hierarchyName = best ? FUNCTION_HIERARCHY_NAMES[bestCode] : undefined;
+
+    return {
+      nearbyClassifiedRoad: hierarchyName ?? null,
+      provenance: {
+        source: best
+          ? `NSW classified-road layer (Roads_Primary) — live ArcGIS REST; nearest classified road within ${ROAD_PROXIMITY_BUFFER_M}m is a ${hierarchyName} (${(best.attributes.roadnamestring as string | undefined) ?? "unnamed"}). This is a proximity check, not a confirmed frontage road — verify which road the lot actually fronts.`
+          : `NSW classified-road layer (Roads_Primary) — no classified road (Motorway/Primary/Arterial/Sub-Arterial/Distributor) found within ${ROAD_PROXIMITY_BUFFER_M}m; this layer does not include ordinary local streets, so absence here is consistent with (but does not confirm) local-street access.`,
+        retrievedAt: nowIso(),
+      },
+    };
+  }
+
   async planningControls(lotDp: string | null, lga: string, epiName: string): Promise<PlanningControlsResult> {
     const point = await resolvePointForLot(lotDp);
     if (!point) {
@@ -367,21 +479,35 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
         mineSubsidenceDistrictName: null,
         coastalManagementArea: false,
         coastalManagementAreaType: null,
+        groundwaterVulnerability: false,
+        salinity: false,
         provenance: { source: "Lot point could not be resolved — all constraint flags unknown", retrievedAt: nowIso() },
       };
     }
 
-    const [bushfireFeatures, floodFeatures, assFeatures, anefFeatures, mineSubsidenceFeatures, coastalWetlandsFeatures, coastalEnvFeatures, coastalUseFeatures] =
-      await Promise.all([
-        queryArcGis(BUSHFIRE_LAYER, pointQuery(point, "Category")).catch(() => [] as ArcGisFeature[]),
-        queryArcGis(FLOOD_LAYER, pointQuery(point, "LAY_CLASS")).catch(() => [] as ArcGisFeature[]),
-        queryArcGis(ACID_SULFATE_LAYER, pointQuery(point, "LABEL")).catch(() => [] as ArcGisFeature[]),
-        queryArcGis(ANEF_LAYER, pointQuery(point, "ANEF_CODE")).catch(() => [] as ArcGisFeature[]),
-        queryArcGis(MINE_SUBSIDENCE_LAYER, pointQuery(point, "DISTRICTNAME")).catch(() => [] as ArcGisFeature[]),
-        queryArcGis(COASTAL_WETLANDS_LAYER, pointQuery(point, "LAY_CLASS")).catch(() => [] as ArcGisFeature[]),
-        queryArcGis(COASTAL_ENV_AREA_LAYER, pointQuery(point, "LAY_CLASS")).catch(() => [] as ArcGisFeature[]),
-        queryArcGis(COASTAL_USE_AREA_LAYER, pointQuery(point, "LAY_CLASS")).catch(() => [] as ArcGisFeature[]),
-      ]);
+    const [
+      bushfireFeatures,
+      floodFeatures,
+      assFeatures,
+      anefFeatures,
+      mineSubsidenceFeatures,
+      coastalWetlandsFeatures,
+      coastalEnvFeatures,
+      coastalUseFeatures,
+      groundwaterFeatures,
+      salinityFeatures,
+    ] = await Promise.all([
+      queryArcGis(BUSHFIRE_LAYER, pointQuery(point, "Category")).catch(() => [] as ArcGisFeature[]),
+      queryArcGis(FLOOD_LAYER, pointQuery(point, "LAY_CLASS")).catch(() => [] as ArcGisFeature[]),
+      queryArcGis(ACID_SULFATE_LAYER, pointQuery(point, "LABEL")).catch(() => [] as ArcGisFeature[]),
+      queryArcGis(ANEF_LAYER, pointQuery(point, "ANEF_CODE")).catch(() => [] as ArcGisFeature[]),
+      queryArcGis(MINE_SUBSIDENCE_LAYER, pointQuery(point, "DISTRICTNAME")).catch(() => [] as ArcGisFeature[]),
+      queryArcGis(COASTAL_WETLANDS_LAYER, pointQuery(point, "LAY_CLASS")).catch(() => [] as ArcGisFeature[]),
+      queryArcGis(COASTAL_ENV_AREA_LAYER, pointQuery(point, "LAY_CLASS")).catch(() => [] as ArcGisFeature[]),
+      queryArcGis(COASTAL_USE_AREA_LAYER, pointQuery(point, "LAY_CLASS")).catch(() => [] as ArcGisFeature[]),
+      queryArcGis(GROUNDWATER_LAYER, pointQuery(point, "LAY_CLASS")).catch(() => [] as ArcGisFeature[]),
+      queryArcGis(SALINITY_LAYER, pointQuery(point, "LAY_CLASS")).catch(() => [] as ArcGisFeature[]),
+    ]);
 
     const bushfireFeature = bushfireFeatures[0];
     const coastalMatch = coastalWetlandsFeatures.length > 0
@@ -407,9 +533,11 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
       mineSubsidenceDistrictName: (mineSubsidenceFeatures[0]?.attributes.DISTRICTNAME as string | undefined) ?? null,
       coastalManagementArea: coastalMatch !== null,
       coastalManagementAreaType: coastalMatch,
+      groundwaterVulnerability: groundwaterFeatures.length > 0,
+      salinity: salinityFeatures.length > 0,
       provenance: {
         source:
-          "NSW ePlanning live ArcGIS REST: bushfire (RFS Bushfire Prone Land), flood (Flood Planning Map), acid sulfate soils, airport noise (ANEF), mine subsidence district, and Coastal Management SEPP areas (wetlands/environment/use area — the dedicated Coastal Vulnerability/erosion map has no statewide dataset published yet). Contamination and sewer easements still have no confirmed free live statewide source.",
+          "NSW ePlanning live ArcGIS REST: bushfire (RFS Bushfire Prone Land), flood (Flood Planning Map), acid sulfate soils, airport noise (ANEF), mine subsidence district, Coastal Management SEPP areas (wetlands/environment/use area — the dedicated Coastal Vulnerability/erosion map has no statewide dataset published yet), groundwater vulnerability, and salinity. Contamination and sewer easements still have no confirmed free live statewide source.",
         retrievedAt: nowIso(),
       },
     };

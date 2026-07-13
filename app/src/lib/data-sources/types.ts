@@ -20,6 +20,20 @@ export interface TopographyResult {
   provenance: Provenance;
 }
 
+export interface SoilTypeResult {
+  /** Great Soil Group name, e.g. "Yellow Podzolic Soils - more fertile". Regional soil-landscape classification, not a parcel-specific geotechnical result. */
+  soilType: string | null;
+  /** GSG code, e.g. "YPm". */
+  soilTypeCode: string | null;
+  provenance: Provenance;
+}
+
+export interface RoadAccessResult {
+  /** Name of the nearest classified-road hierarchy level found within a small buffer (e.g. "Arterial Road"), or null if none nearby (presumed local/unclassified street). */
+  nearbyClassifiedRoad: string | null;
+  provenance: Provenance;
+}
+
 export interface PlanningControlsResult {
   zone: string;
   zoneDescription: string;
@@ -51,6 +65,8 @@ export interface ConstraintsResult {
   coastalManagementArea: boolean;
   /** Which Coastal Management SEPP area type matched, e.g. "Coastal Wetlands". Null when not present. */
   coastalManagementAreaType: string | null;
+  groundwaterVulnerability: boolean;
+  salinity: boolean;
   /** Real bushfire hazard-zone geometry (rings of local-metre points). Null when unavailable. */
   bushfireZoneRings: LotPolygonPoint[][] | null;
   provenance: Provenance;
@@ -71,6 +87,8 @@ export interface DaStatsResult {
 export interface DataSourceAdapter {
   geocode(address: string): Promise<GeocodeResult>;
   topography(lotDp: string | null, lga: string): Promise<TopographyResult>;
+  soilType(lotDp: string | null, lga: string): Promise<SoilTypeResult>;
+  roadAccess(lotDp: string | null, lga: string): Promise<RoadAccessResult>;
   planningControls(lotDp: string | null, lga: string, epiName: string): Promise<PlanningControlsResult>;
   constraints(lotDp: string | null, lga: string): Promise<ConstraintsResult>;
   daStats(lga: string, daType: string): Promise<DaStatsResult>;

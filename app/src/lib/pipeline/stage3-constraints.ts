@@ -85,6 +85,24 @@ export async function runStage3Constraints(
       : "Not mapped within a Coastal Management SEPP wetlands/environment/use area (live layer). Note: the dedicated Coastal Vulnerability Area (erosion) map has no statewide dataset published yet — this is not a confirmed absence of coastal erosion risk for coastal lots.",
   });
 
+  constraints.push({
+    name: "Groundwater vulnerability",
+    present: c.groundwaterVulnerability,
+    classification: c.groundwaterVulnerability ? "documentation-adder" : "documentation-adder",
+    rationale: c.groundwaterVulnerability
+      ? "Live NSW ePlanning Groundwater Vulnerability layer shows this lot as groundwater vulnerable — on-site wastewater/stormwater infiltration design should account for this; verify current provisions."
+      : "Not mapped as groundwater vulnerable for this lot (live ePlanning Groundwater Vulnerability layer).",
+  });
+
+  constraints.push({
+    name: "Salinity",
+    present: c.salinity,
+    classification: c.salinity ? "cost-adder" : "documentation-adder",
+    rationale: c.salinity
+      ? "Live NSW ePlanning Salinity layer shows this lot as saline land — corrosion-resistant fittings and salinity-rated concrete/footing specification are likely required."
+      : "Not mapped as saline land for this lot (live ePlanning Salinity layer).",
+  });
+
   if (siteProfile.slopeClass) {
     constraints.push({
       name: "Topography / slope",

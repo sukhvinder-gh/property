@@ -36,6 +36,14 @@ export const SiteProfileSchema = z.object({
   councilTier: CouncilTierSchema,
   slopeClass: SlopeClassSchema.nullable(),
   slopePercent: z.number().nullable(),
+  // Great Soil Group regional soil-landscape classification — not a
+  // parcel-specific geotechnical result. Null when not mapped.
+  soilType: z.string().nullable(),
+  soilTypeCode: z.string().nullable(),
+  // Nearest classified road (Motorway/Primary/Arterial/Sub-Arterial/Distributor)
+  // within a small proximity buffer — a proximity check, not a confirmed
+  // frontage road. Null when none found nearby (presumed local street).
+  nearbyClassifiedRoad: z.string().nullable(),
   indicativeOnly: z.boolean(),
   provenance: z.array(ProvenanceSchema),
 });
@@ -169,6 +177,20 @@ export const CouncilControlsSummarySchema = z.object({
 });
 export type CouncilControlsSummary = z.infer<typeof CouncilControlsSummarySchema>;
 
+export const UtilitiesSummarySchema = z.object({
+  electricityDistributor: z.string(),
+  otherServicesNote: z.string(),
+});
+export type UtilitiesSummary = z.infer<typeof UtilitiesSummarySchema>;
+
+export const AccessSummarySchema = z.object({
+  drivewayGradient: z.string(),
+  roadFrontage: z.string(),
+  vehicleCrossover: z.string(),
+  wasteAndConstructionAccess: z.string(),
+});
+export type AccessSummary = z.infer<typeof AccessSummarySchema>;
+
 export const RiskImpactSchema = z.enum(["low", "medium", "high"]);
 export type RiskImpact = z.infer<typeof RiskImpactSchema>;
 
@@ -188,6 +210,8 @@ export const AssessmentRecordSchema = z.object({
   buildableEnvelope: BuildableEnvelopeSchema,
   developmentPotential: DevelopmentPotentialSchema,
   councilControls: CouncilControlsSummarySchema,
+  utilities: UtilitiesSummarySchema,
+  access: AccessSummarySchema,
   pathway: PathwaySchema,
   score: ScoreResultSchema,
   feasibilitySummary: FeasibilitySummarySchema,

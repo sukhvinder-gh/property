@@ -1,6 +1,8 @@
 import { SECONDARY_DWELLING_MIN_FRONTAGE_M, SECONDARY_DWELLING_MIN_LOT_SQM } from "@/lib/pipeline/codes-sepp-constants";
 import type { CouncilProfile } from "@/lib/pipeline/council-profiles";
+import { getElectricityDistributor } from "@/lib/pipeline/electricity-distributor";
 import type {
+  AccessSummary,
   BuildableEnvelope,
   Constraint,
   CouncilControlsSummary,
@@ -11,6 +13,7 @@ import type {
   RiskRegisterEntry,
   ScoreResult,
   SiteProfile,
+  UtilitiesSummary,
 } from "@/types/assessment";
 
 // Statewide facts, true regardless of whether a deep council profile exists —
@@ -60,6 +63,43 @@ export function buildCouncilControls(
   };
 }
 
+export function buildUtilitiesSummary(siteProfile: SiteProfile): UtilitiesSummary {
+  const distributor = getElectricityDistributor(siteProfile.lga);
+  return {
+    electricityDistributor: distributor
+      ? `${distributor} (regional LGA-based estimate — distributor boundaries don't always align with LGA lines; confirm before relying on this).`
+      : "Unknown — verify via the relevant distributor's postcode checker (Ausgrid, Endeavour Energy, or Essential Energy).",
+    otherServicesNote:
+      "Water/sewer, stormwater discharge, NBN, and gas availability, plus service relocation requirements, are not computable from any live source — confirm water/sewer via a Section 10.7 planning certificate or the relevant water utility, stormwater/OSD via the council's DCP (see Council controls above), NBN via nbnco.com.au, gas via the relevant network operator (e.g. Jemena), and commission a Dial Before You Dig (DBYD) enquiry before any excavation.",
+  };
+}
+
+export function buildAccessSummary(siteProfile: SiteProfile): AccessSummary {
+  let drivewayGradient: string;
+  if (siteProfile.slopePercent === null || siteProfile.slopeClass === null) {
+    drivewayGradient = "Insufficient data (no slope estimate available) to assess driveway gradient.";
+  } else if (siteProfile.slopeClass === "steep") {
+    drivewayGradient = `Slope ~${siteProfile.slopePercent}% (estimated from a 5m-resolution elevation model) — a graded or split driveway is likely required; check the driveway against the council's max-grade DCP control and AS2890.1 before design.`;
+  } else if (siteProfile.slopeClass === "moderate") {
+    drivewayGradient = `Slope ~${siteProfile.slopePercent}% (estimated from a 5m-resolution elevation model) — the driveway will likely need some grading; standard design should still absorb it, but check against the council's max-grade DCP control.`;
+  } else {
+    drivewayGradient = `Slope ~${siteProfile.slopePercent}% (estimated from a 5m-resolution elevation model) — minimal driveway grading expected.`;
+  }
+
+  const roadFrontage = siteProfile.nearbyClassifiedRoad
+    ? `A ${siteProfile.nearbyClassifiedRoad} was found within 40m of the lot (live NSW classified-road layer) — this is a proximity check, not a confirmed frontage road; busier road classifications commonly attract extra vehicle-crossover/traffic-engineering conditions and may restrict new crossover locations. Verify which road the lot actually fronts before relying on this.`
+    : "No classified road (Motorway/Primary/Arterial/Sub-Arterial/Distributor) found within 40m (live NSW classified-road layer, which does not include ordinary local streets) — consistent with local-street access, though this is not a confirmed absence of a busier road nearby.";
+
+  return {
+    drivewayGradient,
+    roadFrontage,
+    vehicleCrossover:
+      "Vehicle crossover width/location and turning-circle requirements are set by the council's DCP and AS2890.1 (Parking facilities) — not computable from any spatial layer; confirm via the council DCP or a pre-DA meeting.",
+    wasteAndConstructionAccess:
+      "Waste collection access and construction access (site access for machinery, material storage) are site-specific and require a site inspection — not assessable from any spatial layer.",
+  };
+}
+
 // Mitigation text for each real, present constraint name (from stage3-constraints.ts).
 // Kept separate from buildCostSignals' phrasing (a cost flag) — this is framed
 // as an action to take, matching the professional risk-register convention.
@@ -74,6 +114,8 @@ const CONSTRAINT_MITIGATIONS: Record<string, string> = {
   "Topography / slope": "Commission a geotechnical assessment; budget for retaining walls and/or cut-fill.",
   "Mine subsidence district": "Contact Subsidence Advisory NSW / the Mine Subsidence Board before design; budget for additional footing and structural engineering.",
   "Coastal management SEPP area": "Confirm referral/consent requirements under the Coastal Management SEPP; commission a coastal engineer if near a wetland or the shoreline.",
+  "Groundwater vulnerability": "Account for groundwater vulnerability in on-site wastewater/stormwater infiltration design; confirm with a geotechnical/hydrogeological assessment.",
+  Salinity: "Specify corrosion-resistant fittings and salinity-rated concrete/footing materials; confirm via a geotechnical assessment.",
 };
 
 export function buildRiskRegister(
@@ -182,9 +224,14 @@ export function buildCostSignals(constraints: Constraint[], siteProfile: SitePro
       signals.push("Mine subsidence: additional footings/engineering design and Mine Subsidence Board approval likely required.");
     } else if (c.name.startsWith("Coastal management")) {
       signals.push("Coastal: additional referral/consent requirements likely apply (Coastal Management SEPP).");
+    } else if (c.name.startsWith("Groundwater")) {
+      signals.push("Groundwater: infiltration/OSD design should account for groundwater vulnerability.");
+    } else if (c.name.startsWith("Salinity")) {
+      signals.push("Salinity: corrosion-resistant fittings and salinity-rated concrete likely required.");
     }
   }
   signals.push("Demolition/tree removal: confirm via aerial imagery or site inspection — not assessed from spatial layers alone.");
+  signals.push("Geotechnical: AS2870 site classification (soil reactivity) required for footing design — not assessed from spatial layers alone.");
   return signals;
 }
 
@@ -194,6 +241,10 @@ export function buildDocumentChecklist(pathway: Pathway, constraints: Constraint
     docs.add("Statement of Environmental Effects");
   }
   docs.add("BASIX certificate");
+  // AS2870 site classification (soil reactivity) is required for essentially
+  // every new residential footing design in NSW, regardless of slope — not
+  // conditional on the Topography constraint.
+  docs.add("Geotechnical / site classification report (AS2870)");
   if (constraints.find((c) => c.name.startsWith("Bushfire") && c.present)) {
     docs.add("Bushfire assessment / BAL report");
   }
@@ -201,7 +252,7 @@ export function buildDocumentChecklist(pathway: Pathway, constraints: Constraint
     docs.add("Flood study / flood impact assessment");
   }
   if (constraints.find((c) => c.name.startsWith("Topography") && c.present)) {
-    docs.add("Arborist report (if tree removal required) and geotechnical/site classification report");
+    docs.add("Arborist report (if tree removal required)");
   }
   if (constraints.find((c) => c.name.startsWith("Mine subsidence") && c.present)) {
     docs.add("Mine Subsidence Board approval");
@@ -246,6 +297,9 @@ export function buildRisksAndUnknowns(
   );
   risks.push(
     "Slope/levels above are a DEM-derived estimate (5m resolution), not a surveyed cross-section — exact levels, existing service locations, existing tree locations, and neighbouring structures still require a registered surveyor's detail/boundary survey."
+  );
+  risks.push(
+    "Soil type above (Great Soil Group) is a regional soil-landscape classification, not a parcel-specific geotechnical result — rock depth, fill material, foundation type, excavation risk, and retaining wall requirements cannot be determined from any spatial layer; commission a geotechnical investigation (boreholes/test pits, AS2870 site classification) before finalising footing design."
   );
   return risks;
 }
