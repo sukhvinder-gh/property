@@ -3,10 +3,16 @@ import type { CouncilProfile } from "@/lib/pipeline/council-profiles";
 import { getElectricityDistributor } from "@/lib/pipeline/electricity-distributor";
 import type {
   AccessSummary,
+  ApprovalStrategySummary,
   BuildableEnvelope,
   Constraint,
+  ConstructionFeasibilitySummary,
+  CostAssessmentSummary,
   CouncilControlsSummary,
+  CouncilTier,
   DevelopmentPotential,
+  EngineeringSummary,
+  EnvironmentalSummary,
   FeasibilitySummary,
   Pathway,
   PlanningControls,
@@ -15,6 +21,13 @@ import type {
   SiteProfile,
   UtilitiesSummary,
 } from "@/types/assessment";
+
+// NSW Land and Soil Capability ratings run 1 (best/least limiting) to 8
+// (worst/most limiting) — verified live 2026-07. 5+ is where the scheme's
+// confirmed class names cross from "Moderate" into progressively lower
+// capability; used here only as an "elevated limitation" threshold, not a
+// specific (unverified) class label for 6-8.
+const LSC_ELEVATED_THRESHOLD = 5;
 
 // Statewide facts, true regardless of whether a deep council profile exists —
 // see docs/property-pre-approval-engine research notes: Standard Instrument
@@ -97,6 +110,204 @@ export function buildAccessSummary(siteProfile: SiteProfile): AccessSummary {
       "Vehicle crossover width/location and turning-circle requirements are set by the council's DCP and AS2890.1 (Parking facilities) — not computable from any spatial layer; confirm via the council DCP or a pre-DA meeting.",
     wasteAndConstructionAccess:
       "Waste collection access and construction access (site access for machinery, material storage) are site-specific and require a site inspection — not assessable from any spatial layer.",
+  };
+}
+
+export function buildEngineeringSummary(siteProfile: SiteProfile, constraints: Constraint[]): EngineeringSummary {
+  const massMovement = siteProfile.massMovementRating;
+  let retainingWalls: string;
+  if (massMovement === null && siteProfile.slopeClass === null) {
+    retainingWalls = "Insufficient data (no mass-movement rating or slope estimate available) to assess retaining wall likelihood.";
+  } else if ((massMovement !== null && massMovement >= LSC_ELEVATED_THRESHOLD) || siteProfile.slopeClass === "steep") {
+    retainingWalls = `Elevated mass-movement/slope-stability risk${massMovement !== null ? ` (NSW Land and Soil Capability mass-movement rating ${massMovement}/8, where 1 is best)` : ""}${siteProfile.slopeClass ? ` and ${siteProfile.slopeClass} slope` : ""} — retaining walls are likely required; commission a geotechnical assessment before design.`;
+  } else {
+    retainingWalls = `No elevated mass-movement risk found${massMovement !== null ? ` (NSW Land and Soil Capability mass-movement rating ${massMovement}/8, where 1 is best)` : ""} — retaining walls not indicated by these checks, though final design still depends on a geotechnical assessment.`;
+  }
+
+  const waterErosion = siteProfile.waterErosionRating;
+  const cutAndFill =
+    siteProfile.slopePercent === null
+      ? "Insufficient data (no slope estimate available) to indicate cut/fill likely required."
+      : `Slope ~${siteProfile.slopePercent}% (estimated from a 5m-resolution elevation model)${waterErosion !== null ? `; water erosion rating ${waterErosion}/8 (NSW Land and Soil Capability, where 1 is best)` : ""} — exact cut/fill volumes require a civil engineer's survey, not assessed from spatial layers alone.`;
+
+  const shallowRock = siteProfile.shallowRockRating;
+  const waterlogging = siteProfile.waterloggingRating;
+  const groundwater = constraints.find((c) => c.name.startsWith("Groundwater"))?.present ?? false;
+  const flood = constraints.find((c) => c.name.startsWith("Flood"))?.present ?? false;
+  const basementConcerns: string[] = [];
+  if (shallowRock !== null && shallowRock >= LSC_ELEVATED_THRESHOLD) basementConcerns.push(`shallow rock rating ${shallowRock}/8`);
+  if (waterlogging !== null && waterlogging >= LSC_ELEVATED_THRESHOLD) basementConcerns.push(`waterlogging rating ${waterlogging}/8`);
+  if (groundwater) basementConcerns.push("groundwater vulnerable area");
+  if (flood) basementConcerns.push("flood planning area");
+  const basementFeasibility =
+    basementConcerns.length > 0
+      ? `Elevated basement complexity indicated: ${basementConcerns.join(", ")} (all NSW Land and Soil Capability ratings are 1=best/8=worst) — likely to encounter rock and/or a high water table; commission a geotechnical/hydrogeological assessment before committing to a basement.`
+      : "No elevated rock, waterlogging, groundwater, or flood risk found by these checks — a basement is not excluded, but a geotechnical/hydrogeological assessment is still required before committing to one.";
+
+  return {
+    stormwaterConcept:
+      "See the Council controls section above for this council's stormwater policy; a stormwater concept plan and on-site detention (OSD) are typically required under the Codes SEPP/council DCP for most dwellings.",
+    rainwaterTank:
+      "BASIX commonly requires a rainwater tank connected to toilet/laundry/irrigation for most new NSW dwellings — the specific target depends on the BASIX index score, not this site's location; confirm via the BASIX certificate.",
+    retainingWalls,
+    cutAndFill,
+    basementFeasibility,
+    structuralFeasibility: "Structural feasibility requires a structural engineer's assessment — not computable from any spatial layer.",
+  };
+}
+
+export function buildEnvironmentalSummary(siteProfile: SiteProfile, constraints: Constraint[]): EnvironmentalSummary {
+  const canopy = siteProfile.localTreeCanopyPercent;
+  const canopyNote = canopy !== null ? ` The surrounding area has ~${canopy}% tree canopy cover (ABS Mesh-Block level, NSW UHGC data) — area-level context, not a parcel-specific measurement.` : "";
+
+  const anef = constraints.find((c) => c.name.startsWith("Aircraft noise"))?.present ?? false;
+  const busyRoad = siteProfile.nearbyClassifiedRoad !== null;
+  const acousticTriggers: string[] = [];
+  if (anef) acousticTriggers.push("within a mapped ANEF contour");
+  if (busyRoad) acousticTriggers.push(`near a ${siteProfile.nearbyClassifiedRoad}`);
+  const acousticRequirements =
+    acousticTriggers.length > 0
+      ? `This lot is ${acousticTriggers.join(" and ")} — acoustic treatment/glazing requirements are more likely; confirm via an acoustic consultant.`
+      : "No elevated acoustic trigger (ANEF contour or nearby classified road) found by these checks.";
+
+  return {
+    basixAndNatHers:
+      "A BASIX certificate is required (see document checklist), and NSW's BASIX thermal performance standard has required a minimum 7-star NatHERS rating since 1 October 2023 (aligned with NCC 2022) — except NatHERS climate zones 9, 10, and 11 (far-west NSW), which remain on the prior BASIX thermal standard. The specific achieved rating depends on the dwelling design, not this site's location.",
+    solarAccess: `Solar access for a standard dwelling house is assessed against the council's own DCP private-open-space/solar-access provision (not modelled per-council here unless already in a deep council profile) — not the Apartment Design Guide's 2-3 hour rule, which applies only to apartment developments under SEPP 65.${canopyNote}`,
+    overshadowingAndPrivacy: `Overshadowing and privacy impacts from neighbouring buildings cannot be assessed — no aerial imagery or building-footprint data source exists in this engine; a site inspection and shadow diagram are required.${canopyNote}`,
+    acousticRequirements,
+  };
+}
+
+export function buildConstructionFeasibilitySummary(
+  siteProfile: SiteProfile,
+  buildableEnvelope: BuildableEnvelope,
+  councilProfile?: CouncilProfile | null
+): ConstructionFeasibilitySummary {
+  const frontage = siteProfile.frontageM;
+  const accessConcerns: string[] = [];
+  if (frontage !== null && frontage < 10) accessConcerns.push(`a narrow ${frontage}m frontage`);
+  if (siteProfile.slopeClass === "steep") accessConcerns.push("a steep slope");
+  const siteAccessForMachinery =
+    accessConcerns.length > 0
+      ? `${accessConcerns.join(" and ")} may complicate machinery access — confirm with the builder before mobilising equipment.`
+      : `Frontage ${frontage ?? "unknown"}m, slope ${siteProfile.slopeClass ?? "unknown"} — no elevated machinery-access complexity indicated by these checks.`;
+  const roadPermitNote =
+    siteProfile.nearbyClassifiedRoad !== null
+      ? ` This lot is near a ${siteProfile.nearbyClassifiedRoad} — a traffic-management plan/work-zone permit is more likely to be required for construction access.`
+      : "";
+
+  const canopy = siteProfile.localTreeCanopyPercent;
+  const smallLot = siteProfile.lotSizeSqm !== null && siteProfile.lotSizeSqm < 450;
+  const narrowFrontage = frontage !== null && frontage < 10;
+  const craneReasons: string[] = [];
+  if (smallLot || narrowFrontage) craneReasons.push("limited side access for material handling on this lot");
+  if (canopy !== null && canopy >= 30) craneReasons.push(`the area's ~${canopy}% tree canopy cover, which may require overhead clearance coordination`);
+  const craneRequirements =
+    craneReasons.length > 0
+      ? `A crane may be needed given ${craneReasons.join(" and ")} — final requirement is a builder's determination.`
+      : "No factors indicating an elevated likelihood of crane use found by these checks — final requirement is still a builder's determination.";
+
+  let materialStorage: string;
+  if (buildableEnvelope.envelopeAreaSqm === null || siteProfile.lotSizeSqm === null) {
+    materialStorage = "Insufficient data (buildable envelope or lot size unavailable) to assess on-site material storage room.";
+  } else if (buildableEnvelope.envelopeAreaSqm > siteProfile.lotSizeSqm) {
+    // The envelope is a bounding-box-derived rectangle (see boundingBoxDims in
+    // arcgis.ts), which can exceed the true polygon area for irregular/corner-cut
+    // lots — same guard as stage6-scoring.ts's DCP-coverage check; a margin here
+    // would be nonsensical, not a real result.
+    materialStorage = `This lot's shape is too irregular for the bounding-box envelope estimate to imply a reliable on-site storage margin — confirm available storage area with a site survey.`;
+  } else {
+    const margin = siteProfile.lotSizeSqm - buildableEnvelope.envelopeAreaSqm;
+    materialStorage =
+      margin > 200
+        ? `The lot (${siteProfile.lotSizeSqm}m²) has ${margin}m² beyond the buildable envelope — on-site material storage is likely feasible.`
+        : `The lot (${siteProfile.lotSizeSqm}m²) has only ~${margin}m² beyond the buildable envelope — on-site storage may be tight; a council road-occupancy permit or off-site storage may be needed.`;
+  }
+
+  const neighbourProtection = councilProfile
+    ? `${councilProfile.setbacks.sideM}m side setback (${councilProfile.instrumentName}) — construction (hoarding, dust screens, protective works) will sit close to the side boundary; confirm neighbour-protection requirements with the builder.`
+    : "Side setback not deep-profiled for this council in this engine (generic assumption used elsewhere in this report) — verify actual neighbour-protection requirements via the council DCP or a pre-DA meeting.";
+
+  return {
+    siteAccessForMachinery: siteAccessForMachinery + roadPermitNote,
+    craneRequirements,
+    materialStorage,
+    neighbourProtection,
+    temporaryFencing:
+      "Temporary fencing/hoarding around the construction site is a statewide requirement under the Work Health and Safety Regulation 2017 (SafeWork NSW) — not site-specific, applies regardless of location.",
+    existingRetainingWallsAndDemolition:
+      "Existing retaining walls and demolition scope cannot be confirmed — no aerial imagery or building-footprint data source exists in this engine; a site inspection is required (see the superlot/registration notes in Risks & unknowns for related caveats).",
+  };
+}
+
+export function buildCostAssessmentSummary(costSignals: string[]): CostAssessmentSummary {
+  return {
+    landValueAndConstruction:
+      "Land value, construction, demolition, site preparation, excavation, rock removal, retaining wall, and landscaping costs are market-rate figures with no authoritative live source this engine can verify — commission a current real estate valuation and a quantity surveyor/builder quote rather than relying on any figure in this report.",
+    siteSpecificCostDrivers:
+      costSignals.length > 0
+        ? "See Site cost signals above for the constraint-driven cost items identified for this lot (e.g. bushfire, flood, slope, mine subsidence, geotechnical)."
+        : "No constraint-driven cost signals were identified for this lot by these checks — see Site cost signals above.",
+    statutoryFeesAndLevies:
+      "Three real NSW statutory fees/levies (not market estimates): (1) DA lodgement fees are calculated on a tiered scale based on estimated development cost, using a fee unit of $113.90 for FY2025/26 (Schedule 4, Environmental Planning and Assessment Regulation 2021) — confirm the exact fee with the council's current fees and charges schedule; (2) a Long Service Levy of 0.25% applies to building work valued at $250,000 or more (NSW Long Service Corporation, rate/threshold changed 31 December 2022); (3) Home Building Compensation Fund (home warranty) insurance is required for residential building work over $20,000 (Home Building Act 1989 s92).",
+    contingency:
+      "A 10-15% contingency allowance is a common industry convention at feasibility stage, particularly where the risk register above shows unresolved items — not a site-specific calculation.",
+  };
+}
+
+export function buildApprovalStrategySummary(
+  pathway: Pathway,
+  constraints: Constraint[],
+  planningControls: PlanningControls,
+  councilTier: CouncilTier,
+  riskRegister: RiskRegisterEntry[]
+): ApprovalStrategySummary {
+  const consentAuthority: Record<Pathway["pathway"], string> = {
+    cdc: "A registered/accredited private certifier (or council, at the applicant's election) issues the Complying Development Certificate — no council merit assessment applies.",
+    da: "Council is the consent authority for a development of this scale. Large/complex developments can shift to a Sydney district/regional planning panel or the Independent Planning Commission, but that is not expected for a single dwelling, dual occupancy, or standard subdivision.",
+    exempt: "No consent authority required — exempt development.",
+    state: "A state significant/state-led pathway applies — confirm the specific consent authority with the NSW Planning Portal.",
+  };
+
+  const integratedApprovalLines: string[] = [];
+  const bushfire = constraints.find((c) => c.name.startsWith("Bushfire"));
+  if (bushfire?.present) {
+    integratedApprovalLines.push(
+      "Bushfire prone land: likely to require a bushfire report addressing Planning for Bush Fire Protection. A full NSW RFS Section 100B Bush Fire Safety Authority referral applies to subdivision of bushfire-prone land or special-fire-protection-purpose developments, not automatically to a standard single dwelling/dual-occupancy DA — confirm the current referral requirement with council or the certifier (state agency referral processes changed with the Development Coordination Authority from 1 July 2026)."
+    );
+  }
+  const mineSubsidence = constraints.find((c) => c.name.startsWith("Mine subsidence"));
+  if (mineSubsidence?.present) {
+    integratedApprovalLines.push(
+      "Mine subsidence district: approval from Subsidence Advisory NSW is required before work starts. Council/certifier may determine without a separate referral only where the development meets specific published guidelines (Guidelines 2, 3, 3A, 6, 8) — otherwise an integrated referral applies."
+    );
+  }
+  if (planningControls.heritageItem || planningControls.heritageConservationArea) {
+    integratedApprovalLines.push(
+      "Heritage item / conservation area: expect council heritage advisor review; state-significant items may also require Heritage NSW referral."
+    );
+  }
+  const integratedApprovals =
+    integratedApprovalLines.length > 0
+      ? integratedApprovalLines.join(" ")
+      : "No integrated/concurrent agency referrals are indicated by the constraints identified — standard council/certifier assessment is expected.";
+
+  const hasBlockerConstraint = constraints.some((c) => c.present && c.classification === "blocker");
+  const hasHighImpactRisk = riskRegister.some((r) => r.impact === "high");
+  const preDaConsultation =
+    hasBlockerConstraint || councilTier === "unprofiled_data_thin" || hasHighImpactRisk
+      ? "A pre-lodgement meeting with council is recommended before finalising design — this site has a blocker-classified constraint, a high-impact risk register item, or falls under a council this engine has limited profiled data for, any of which raise the value of confirming council's position early."
+      : "A pre-lodgement meeting with council is optional for a site with no blocker constraints or high-impact risks identified here, but can still shorten assessment time on complex designs.";
+
+  const reviewAndAppealRights =
+    "Three real, fixed NSW review/appeal rights (not case-specific estimates): (1) a DA not determined within 40 days of lodgement (60 days for designated/integrated development) is taken to be refused on that date — 'deemed refusal' (Environmental Planning and Assessment Act 1979 s8.10(1)); (2) a Section 8.2 internal review of a refusal or conditions may be requested within 6 months of determination, not available for designated or Crown development (EP&A Act 1979 s8.2/s8.3); (3) a Class 1 merit appeal to the NSW Land and Environment Court may be lodged within 6 months of the determination or deemed-refusal date (EP&A Act 1979 s8.7/s8.9/s8.10).";
+
+  return {
+    consentAuthority: consentAuthority[pathway.pathway],
+    integratedApprovals,
+    preDaConsultation,
+    reviewAndAppealRights,
   };
 }
 

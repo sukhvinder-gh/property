@@ -9,10 +9,15 @@ import { runStage5Pathway } from "@/lib/pipeline/stage5-pathway";
 import { runStage6Scoring } from "@/lib/pipeline/stage6-scoring";
 import {
   buildAccessSummary,
+  buildApprovalStrategySummary,
+  buildConstructionFeasibilitySummary,
+  buildCostAssessmentSummary,
   buildCostSignals,
   buildCouncilControls,
   buildDevelopmentPotential,
   buildDocumentChecklist,
+  buildEngineeringSummary,
+  buildEnvironmentalSummary,
   buildFeasibilitySummary,
   buildNextSteps,
   buildRiskRegister,
@@ -51,6 +56,11 @@ export async function runAssessment(adapter: DataSourceAdapter, input: RunAssess
   const councilControls = buildCouncilControls(siteProfile, planningControls, councilProfile);
   const utilities = buildUtilitiesSummary(siteProfile);
   const access = buildAccessSummary(siteProfile);
+  const engineering = buildEngineeringSummary(siteProfile, constraints);
+  const environmental = buildEnvironmentalSummary(siteProfile, constraints);
+  const constructionFeasibility = buildConstructionFeasibilitySummary(siteProfile, buildableEnvelope, councilProfile);
+  const costAssessment = buildCostAssessmentSummary(costSignals);
+  const approvalStrategy = buildApprovalStrategySummary(pathway, constraints, planningControls, siteProfile.councilTier, riskRegister);
   const feasibilitySummary = buildFeasibilitySummary(siteProfile, planningControls, constraints, buildableEnvelope, pathway, score);
 
   return {
@@ -64,6 +74,11 @@ export async function runAssessment(adapter: DataSourceAdapter, input: RunAssess
     councilControls,
     utilities,
     access,
+    engineering,
+    environmental,
+    constructionFeasibility,
+    costAssessment,
+    approvalStrategy,
     pathway,
     score,
     feasibilitySummary,

@@ -2,7 +2,9 @@ import type {
   ConstraintsResult,
   DaStatsResult,
   DataSourceAdapter,
+  EnvironmentalContextResult,
   GeocodeResult,
+  LandCapabilityResult,
   PlanningControlsResult,
   RoadAccessResult,
   SoilTypeResult,
@@ -292,6 +294,23 @@ export class MockDataSourceAdapter implements DataSourceAdapter {
       soilType: null,
       soilTypeCode: null,
       provenance: { source: "NSW Great Soil Group (GSG) Soil Type map — mock fixture, soil type not modelled", retrievedAt: nowIso() },
+    };
+  }
+
+  async landCapability(_lotDp: string | null, _lga: string): Promise<LandCapabilityResult> {
+    return {
+      shallowRockRating: null,
+      massMovementRating: null,
+      waterloggingRating: null,
+      waterErosionRating: null,
+      provenance: { source: "NSW Land and Soil Capability (LSC) map — mock fixture, land capability not modelled", retrievedAt: nowIso() },
+    };
+  }
+
+  async environmentalContext(_lotDp: string | null, _lga: string): Promise<EnvironmentalContextResult> {
+    return {
+      localTreeCanopyPercent: null,
+      provenance: { source: "NSW Urban Vegetation Cover (UHGC) — mock fixture, tree canopy not modelled", retrievedAt: nowIso() },
     };
   }
 

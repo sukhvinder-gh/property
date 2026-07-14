@@ -2,7 +2,9 @@ import type {
   ConstraintsResult,
   DaStatsResult,
   DataSourceAdapter,
+  EnvironmentalContextResult,
   GeocodeResult,
+  LandCapabilityResult,
   PlanningControlsResult,
   RoadAccessResult,
   SoilTypeResult,
@@ -71,6 +73,8 @@ const COASTAL_USE_AREA_LAYER = `${COASTAL_SERVICE}/7`;
 const GROUNDWATER_LAYER = `${PROTECTION_SERVICE}/237`;
 const SALINITY_LAYER = `${PROTECTION_SERVICE}/241`;
 const SOIL_SERVICE = "https://mapprod1.environment.nsw.gov.au/arcgis/rest/services/Soil/Soils_GSG_SoilTypes_EDP/MapServer/2";
+const LAND_CAPABILITY_SERVICE = "https://mapprod1.environment.nsw.gov.au/arcgis/rest/services/LandCap/LandAndSoilCapability_EDP/MapServer/2";
+const TREE_CANOPY_LAYER = "https://mapprod2.environment.nsw.gov.au/arcgis/rest/services/UHGC/UHGC/MapServer/5";
 const ROADS_LAYER = "https://maps.six.nsw.gov.au/arcgis/rest/services/sixmaps/LPIMap/MapServer/55";
 const ROADS_LAYER_SR = 102100; // native storage SR — verified live 2026-07 that this layer silently returns empty results when queried in 28356
 const ROAD_PROXIMITY_BUFFER_M = 40;
@@ -348,6 +352,61 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
         source: feature
           ? "NSW Great Soil Group (GSG) Soil Type map — live ArcGIS REST. Regional soil-landscape classification, not a parcel-specific geotechnical result — commission an AS2870 site classification report before finalising footing design."
           : "NSW Great Soil Group (GSG) Soil Type map — no classification mapped for this lot (live ArcGIS REST)",
+        retrievedAt: nowIso(),
+      },
+    };
+  }
+
+  async landCapability(lotDp: string | null, _lga: string): Promise<LandCapabilityResult> {
+    const point = await resolvePointForLot(lotDp);
+    if (!point) {
+      return {
+        shallowRockRating: null,
+        massMovementRating: null,
+        waterloggingRating: null,
+        waterErosionRating: null,
+        provenance: { source: "No lot/DP to resolve — cannot look up land capability", retrievedAt: nowIso() },
+      };
+    }
+
+    const features = await queryArcGis(LAND_CAPABILITY_SERVICE, pointQuery(point, "LSC_Sh_Rk,LSC_Mass_m,LSC_Watlog,LSC_WatrEr")).catch(
+      () => [] as ArcGisFeature[]
+    );
+    const feature = features[0];
+
+    return {
+      shallowRockRating: (feature?.attributes.LSC_Sh_Rk as number | undefined) ?? null,
+      massMovementRating: (feature?.attributes.LSC_Mass_m as number | undefined) ?? null,
+      waterloggingRating: (feature?.attributes.LSC_Watlog as number | undefined) ?? null,
+      waterErosionRating: (feature?.attributes.LSC_WatrEr as number | undefined) ?? null,
+      provenance: {
+        source: feature
+          ? "NSW Land and Soil Capability (LSC) map — live ArcGIS REST. Each hazard rated 1 (best/least limiting) to 8 (worst/most limiting) — a regional land-capability classification, not a parcel-specific geotechnical result."
+          : "NSW Land and Soil Capability (LSC) map — no classification mapped for this lot (live ArcGIS REST)",
+        retrievedAt: nowIso(),
+      },
+    };
+  }
+
+  async environmentalContext(lotDp: string | null, _lga: string): Promise<EnvironmentalContextResult> {
+    const point = await resolvePointForLot(lotDp);
+    if (!point) {
+      return {
+        localTreeCanopyPercent: null,
+        provenance: { source: "No lot/DP to resolve — cannot look up local tree canopy", retrievedAt: nowIso() },
+      };
+    }
+
+    const features = await queryArcGis(TREE_CANOPY_LAYER, pointQuery(point, "PCT_TREE")).catch(() => [] as ArcGisFeature[]);
+    const feature = features[0];
+    const pct = feature?.attributes.PCT_TREE as number | undefined;
+
+    return {
+      localTreeCanopyPercent: pct !== undefined ? Math.round(pct * 10) / 10 : null,
+      provenance: {
+        source: feature
+          ? "NSW Urban Vegetation Cover — Percent Tree Canopy (UHGC) — live ArcGIS REST. ABS Mesh-Block-level area statistic, not a parcel-specific overshadowing measurement."
+          : "NSW Urban Vegetation Cover — Percent Tree Canopy (UHGC) — no data mapped for this lot (live ArcGIS REST)",
         retrievedAt: nowIso(),
       },
     };

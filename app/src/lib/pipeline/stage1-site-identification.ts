@@ -13,9 +13,16 @@ export async function runStage1SiteIdentification(
   address: string
 ): Promise<SiteProfile> {
   const geo = await adapter.geocode(address);
-  const topo = await adapter.topography(geo.lotDp, geo.lga);
-  const soil = await adapter.soilType(geo.lotDp, geo.lga);
-  const road = await adapter.roadAccess(geo.lotDp, geo.lga);
+  // None of these five depend on each other's results — run concurrently so a
+  // single slow upstream service doesn't inflate total latency (and the risk
+  // of downstream timeouts) by stacking five sequential round-trips.
+  const [topo, soil, road, landCap, envContext] = await Promise.all([
+    adapter.topography(geo.lotDp, geo.lga),
+    adapter.soilType(geo.lotDp, geo.lga),
+    adapter.roadAccess(geo.lotDp, geo.lga),
+    adapter.landCapability(geo.lotDp, geo.lga),
+    adapter.environmentalContext(geo.lotDp, geo.lga),
+  ]);
 
   const councilTier: CouncilTier = adapter.isCouncilProfiled(geo.lga)
     ? "profiled"
@@ -41,7 +48,12 @@ export async function runStage1SiteIdentification(
     soilType: soil.soilType,
     soilTypeCode: soil.soilTypeCode,
     nearbyClassifiedRoad: road.nearbyClassifiedRoad,
+    shallowRockRating: landCap.shallowRockRating,
+    massMovementRating: landCap.massMovementRating,
+    waterloggingRating: landCap.waterloggingRating,
+    waterErosionRating: landCap.waterErosionRating,
+    localTreeCanopyPercent: envContext.localTreeCanopyPercent,
     indicativeOnly: dimensionsUnknown || geo.registrationStatus === "unregistered",
-    provenance: [geo.provenance, topo.provenance, soil.provenance, road.provenance],
+    provenance: [geo.provenance, topo.provenance, soil.provenance, road.provenance, landCap.provenance, envContext.provenance],
   };
 }

@@ -145,6 +145,50 @@ export function ReportView({ record }: { record: AssessmentRecord }) {
       </section>
 
       <section>
+        <h3 className="font-semibold">Engineering</h3>
+        <ul className="mt-1 list-disc pl-5">
+          <li>Stormwater concept: {record.engineering.stormwaterConcept}</li>
+          <li>Rainwater tank: {record.engineering.rainwaterTank}</li>
+          <li>Retaining walls: {record.engineering.retainingWalls}</li>
+          <li>Cut &amp; fill: {record.engineering.cutAndFill}</li>
+          <li>Basement feasibility: {record.engineering.basementFeasibility}</li>
+          <li>Structural feasibility: {record.engineering.structuralFeasibility}</li>
+        </ul>
+      </section>
+
+      <section>
+        <h3 className="font-semibold">Environmental</h3>
+        <ul className="mt-1 list-disc pl-5">
+          <li>BASIX &amp; NatHERS: {record.environmental.basixAndNatHers}</li>
+          <li>Solar access: {record.environmental.solarAccess}</li>
+          <li>Overshadowing &amp; privacy: {record.environmental.overshadowingAndPrivacy}</li>
+          <li>Acoustic requirements: {record.environmental.acousticRequirements}</li>
+        </ul>
+      </section>
+
+      <section>
+        <h3 className="font-semibold">Construction feasibility</h3>
+        <ul className="mt-1 list-disc pl-5">
+          <li>Site access for machinery: {record.constructionFeasibility.siteAccessForMachinery}</li>
+          <li>Crane requirements: {record.constructionFeasibility.craneRequirements}</li>
+          <li>Material storage: {record.constructionFeasibility.materialStorage}</li>
+          <li>Neighbour protection: {record.constructionFeasibility.neighbourProtection}</li>
+          <li>Temporary fencing: {record.constructionFeasibility.temporaryFencing}</li>
+          <li>Existing retaining walls &amp; demolition: {record.constructionFeasibility.existingRetainingWallsAndDemolition}</li>
+        </ul>
+      </section>
+
+      <section>
+        <h3 className="font-semibold">Cost assessment</h3>
+        <ul className="mt-1 list-disc pl-5">
+          <li>Land value &amp; construction: {record.costAssessment.landValueAndConstruction}</li>
+          <li>Site-specific cost drivers: {record.costAssessment.siteSpecificCostDrivers}</li>
+          <li>Statutory fees &amp; levies: {record.costAssessment.statutoryFeesAndLevies}</li>
+          <li>Contingency: {record.costAssessment.contingency}</li>
+        </ul>
+      </section>
+
+      <section>
         <h3 className="font-semibold">What you can likely build</h3>
         <ul className="mt-1 list-disc pl-5">
           <li>
@@ -241,6 +285,16 @@ export function ReportView({ record }: { record: AssessmentRecord }) {
             ))}
           </ul>
         )}
+      </section>
+
+      <section>
+        <h3 className="font-semibold">Approval strategy</h3>
+        <ul className="mt-1 list-disc pl-5">
+          <li>Consent authority: {record.approvalStrategy.consentAuthority}</li>
+          <li>Integrated/concurrent approvals: {record.approvalStrategy.integratedApprovals}</li>
+          <li>Pre-DA consultation: {record.approvalStrategy.preDaConsultation}</li>
+          <li>Review &amp; appeal rights: {record.approvalStrategy.reviewAndAppealRights}</li>
+        </ul>
       </section>
 
       <section>

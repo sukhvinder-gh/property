@@ -44,6 +44,16 @@ export const SiteProfileSchema = z.object({
   // within a small proximity buffer — a proximity check, not a confirmed
   // frontage road. Null when none found nearby (presumed local street).
   nearbyClassifiedRoad: z.string().nullable(),
+  // NSW Land and Soil Capability ratings, 1 (best/least limiting) to 8
+  // (worst/most limiting) — regional land-capability classification, not a
+  // parcel-specific geotechnical result. Null when not mapped.
+  shallowRockRating: z.number().nullable(),
+  massMovementRating: z.number().nullable(),
+  waterloggingRating: z.number().nullable(),
+  waterErosionRating: z.number().nullable(),
+  // ABS Mesh-Block-level tree canopy percentage (0-100) — area-level context,
+  // not a parcel-specific overshadowing measurement. Null when not mapped.
+  localTreeCanopyPercent: z.number().nullable(),
   indicativeOnly: z.boolean(),
   provenance: z.array(ProvenanceSchema),
 });
@@ -191,6 +201,50 @@ export const AccessSummarySchema = z.object({
 });
 export type AccessSummary = z.infer<typeof AccessSummarySchema>;
 
+export const EngineeringSummarySchema = z.object({
+  stormwaterConcept: z.string(),
+  rainwaterTank: z.string(),
+  retainingWalls: z.string(),
+  cutAndFill: z.string(),
+  basementFeasibility: z.string(),
+  structuralFeasibility: z.string(),
+});
+export type EngineeringSummary = z.infer<typeof EngineeringSummarySchema>;
+
+export const EnvironmentalSummarySchema = z.object({
+  basixAndNatHers: z.string(),
+  solarAccess: z.string(),
+  overshadowingAndPrivacy: z.string(),
+  acousticRequirements: z.string(),
+});
+export type EnvironmentalSummary = z.infer<typeof EnvironmentalSummarySchema>;
+
+export const ConstructionFeasibilitySummarySchema = z.object({
+  siteAccessForMachinery: z.string(),
+  craneRequirements: z.string(),
+  materialStorage: z.string(),
+  neighbourProtection: z.string(),
+  temporaryFencing: z.string(),
+  existingRetainingWallsAndDemolition: z.string(),
+});
+export type ConstructionFeasibilitySummary = z.infer<typeof ConstructionFeasibilitySummarySchema>;
+
+export const CostAssessmentSummarySchema = z.object({
+  landValueAndConstruction: z.string(),
+  siteSpecificCostDrivers: z.string(),
+  statutoryFeesAndLevies: z.string(),
+  contingency: z.string(),
+});
+export type CostAssessmentSummary = z.infer<typeof CostAssessmentSummarySchema>;
+
+export const ApprovalStrategySummarySchema = z.object({
+  consentAuthority: z.string(),
+  integratedApprovals: z.string(),
+  preDaConsultation: z.string(),
+  reviewAndAppealRights: z.string(),
+});
+export type ApprovalStrategySummary = z.infer<typeof ApprovalStrategySummarySchema>;
+
 export const RiskImpactSchema = z.enum(["low", "medium", "high"]);
 export type RiskImpact = z.infer<typeof RiskImpactSchema>;
 
@@ -212,6 +266,11 @@ export const AssessmentRecordSchema = z.object({
   councilControls: CouncilControlsSummarySchema,
   utilities: UtilitiesSummarySchema,
   access: AccessSummarySchema,
+  engineering: EngineeringSummarySchema,
+  environmental: EnvironmentalSummarySchema,
+  constructionFeasibility: ConstructionFeasibilitySummarySchema,
+  costAssessment: CostAssessmentSummarySchema,
+  approvalStrategy: ApprovalStrategySummarySchema,
   pathway: PathwaySchema,
   score: ScoreResultSchema,
   feasibilitySummary: FeasibilitySummarySchema,

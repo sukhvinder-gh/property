@@ -34,6 +34,21 @@ export interface RoadAccessResult {
   provenance: Provenance;
 }
 
+export interface LandCapabilityResult {
+  /** NSW Land and Soil Capability rating, 1 (best/least limiting) to 8 (worst/most limiting). Null when unavailable. */
+  shallowRockRating: number | null;
+  massMovementRating: number | null;
+  waterloggingRating: number | null;
+  waterErosionRating: number | null;
+  provenance: Provenance;
+}
+
+export interface EnvironmentalContextResult {
+  /** ABS Mesh-Block-level tree canopy percentage (0-100). Area-level context, not a parcel-specific overshadowing result. Null when unavailable. */
+  localTreeCanopyPercent: number | null;
+  provenance: Provenance;
+}
+
 export interface PlanningControlsResult {
   zone: string;
   zoneDescription: string;
@@ -89,6 +104,8 @@ export interface DataSourceAdapter {
   topography(lotDp: string | null, lga: string): Promise<TopographyResult>;
   soilType(lotDp: string | null, lga: string): Promise<SoilTypeResult>;
   roadAccess(lotDp: string | null, lga: string): Promise<RoadAccessResult>;
+  landCapability(lotDp: string | null, lga: string): Promise<LandCapabilityResult>;
+  environmentalContext(lotDp: string | null, lga: string): Promise<EnvironmentalContextResult>;
   planningControls(lotDp: string | null, lga: string, epiName: string): Promise<PlanningControlsResult>;
   constraints(lotDp: string | null, lga: string): Promise<ConstraintsResult>;
   daStats(lga: string, daType: string): Promise<DaStatsResult>;
