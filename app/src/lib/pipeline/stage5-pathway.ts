@@ -1,10 +1,4 @@
-import { SECONDARY_DWELLING_MIN_FRONTAGE_M, SECONDARY_DWELLING_MIN_LOT_SQM } from "@/lib/pipeline/codes-sepp-constants";
 import type { Constraint, Pathway, PlanningControls, SiteProfile } from "@/types/assessment";
-
-// Coincides with the Housing SEPP secondary-dwelling minimums (see
-// codes-sepp-constants.ts) — shared so both only need updating in one place.
-const ASSUMED_CDC_MIN_LOT_SQM = SECONDARY_DWELLING_MIN_LOT_SQM;
-const ASSUMED_CDC_MIN_FRONTAGE_M = SECONDARY_DWELLING_MIN_FRONTAGE_M;
 
 export function runStage5Pathway(
   siteProfile: SiteProfile,
@@ -24,14 +18,20 @@ export function runStage5Pathway(
   if (bushfire?.present) {
     triggers.push("Bushfire prone land — CDC may be excluded depending on BAL rating; verify against current Codes SEPP bushfire provisions.");
   }
-  if (siteProfile.lotSizeSqm !== null && siteProfile.lotSizeSqm < ASSUMED_CDC_MIN_LOT_SQM) {
+  // Minimum lot size for CDC eligibility is set per-development-type by the
+  // relevant Codes SEPP/Housing SEPP division (single dwelling, dual
+  // occupancy, secondary dwelling each differ) and is council/zone-specific
+  // where a minimum applies at all — there is no single statewide number to
+  // assume here. Only the live LSZ (Minimum Lot Size) layer for this lot's
+  // own zone is a real figure; anything else would be guessing a control
+  // value, which SKILL.md rules out. Frontage has no confirmed live
+  // statewide minimum source, so it's never asserted as an exclusion here —
+  // see the secondary-dwelling-specific check in stage7-report.ts, which
+  // correctly uses the Housing SEPP granny-flat figures for that one
+  // development type.
+  if (planningControls.minLotSizeSqm !== null && siteProfile.lotSizeSqm !== null && siteProfile.lotSizeSqm < planningControls.minLotSizeSqm) {
     triggers.push(
-      `Lot size ${siteProfile.lotSizeSqm}m² is below the assumed CDC minimum of ${ASSUMED_CDC_MIN_LOT_SQM}m² — verify current Codes SEPP figure.`
-    );
-  }
-  if (siteProfile.frontageM !== null && siteProfile.frontageM < ASSUMED_CDC_MIN_FRONTAGE_M) {
-    triggers.push(
-      `Frontage ${siteProfile.frontageM}m is below the assumed CDC minimum of ${ASSUMED_CDC_MIN_FRONTAGE_M}m — verify current Codes SEPP figure.`
+      `Lot size ${siteProfile.lotSizeSqm}m² is below this zone's minimum lot size of ${planningControls.minLotSizeSqm}m² (live LSZ layer) — subdivision-dependent CDC pathways are likely excluded; a standalone dwelling on the existing lot may still be unaffected. Verify against the specific Codes SEPP/Housing SEPP division for the proposed development type.`
     );
   }
   if (siteProfile.registrationStatus === "unregistered") {

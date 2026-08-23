@@ -5,7 +5,15 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import type { AssessmentRecord } from "@/types/assessment";
 
-/** Renders "- " lines as a bullet list and other lines as plain paragraphs. */
+/** Splits "**bold**" spans out of a line of text for inline rendering. */
+function renderInline(line: string) {
+  const parts = line.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) =>
+    part.startsWith("**") && part.endsWith("**") ? <strong key={i}>{part.slice(2, -2)}</strong> : part,
+  );
+}
+
+/** Renders "- " lines as a bullet list, other lines as plain paragraphs, and "**bold**" spans inline. */
 function FormattedText({ text }: { text: string }) {
   const lines = text.split("\n");
   const blocks: { type: "list" | "text"; lines: string[] }[] = [];
@@ -24,12 +32,12 @@ function FormattedText({ text }: { text: string }) {
         block.type === "list" ? (
           <ul key={i} className="list-disc space-y-0.5 pl-4">
             {block.lines.map((l, j) => (
-              <li key={j}>{l}</li>
+              <li key={j}>{renderInline(l)}</li>
             ))}
           </ul>
         ) : (
           <p key={i} className={i > 0 ? "mt-2" : undefined}>
-            {block.lines.join(" ")}
+            {renderInline(block.lines.join(" "))}
           </p>
         ),
       )}
