@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   const record = recordParsed.success ? recordParsed.data : null;
 
   const result = streamText({
-    model: anthropic("claude-haiku-4-5"),
+    model: anthropic("claude-haiku-4-5-20251001"),
     system: buildSystemPrompt(record),
     messages: await convertToModelMessages(messages),
   });

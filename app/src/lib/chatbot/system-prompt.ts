@@ -1,5 +1,9 @@
 import type { AssessmentRecord } from "@/types/assessment";
 
+const FORMATTING = `
+Format answers as short bullet points (one fact or step per line, starting with "- ") whenever you're listing multiple facts, steps, constraints, or options. Use a short plain-text sentence only when the answer is a single continuous point. Do not use markdown headers, bold, or asterisk emphasis — plain text and "- " bullets only.
+`.trim();
+
 const GUARDRAILS = `
 Grounding hierarchy: assessment record > live lookup > "I don't have that — here's how to verify it." Model memory is never a source for a statutory number (lot size, setback, FSR, BAL rating).
 Never invent or "typical-value" a control. Never give dollar estimates — route to the cost-signal flags only. Never predict a specific DA's outcome as a certainty; scores are likelihoods.
@@ -16,6 +20,8 @@ export function buildSystemPrompt(record: AssessmentRecord | null): string {
 
 Answer NSW planning concept and process questions (CDC vs DA, what a 10.7 certificate is, how setbacks work). Convert anything lot-specific into a prompt to run an assessment: "That depends on the lot's zone and minimum lot size — want me to check a specific address?"
 
+${FORMATTING}
+
 ${GUARDRAILS}`;
   }
 
@@ -31,6 +37,8 @@ ${GUARDRAILS}`;
 ${tierCaveat}
 
 Answer only from the record and the rules below. If the record lacks a fact, say so and name the verification path. When asked "why is my score X?", answer from the stored factor breakdown (top drivers below), in plain language — never rationalise a score post-hoc from general knowledge.
+
+${FORMATTING}
 
 ${GUARDRAILS}
 

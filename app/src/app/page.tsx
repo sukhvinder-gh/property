@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ReportView } from "@/components/ReportView";
 import { ChatPanel } from "@/components/ChatPanel";
+import { AddressAutocomplete } from "@/components/AddressAutocomplete";
 import type { AssessmentRecord } from "@/types/assessment";
 
 export default function Home() {
@@ -39,12 +40,12 @@ export default function Home() {
       </p>
 
       <div className="mt-6 flex gap-2">
-        <input
-          className="flex-1 rounded border px-3 py-2 text-sm"
+        <AddressAutocomplete
+          className="w-full rounded border px-3 py-2 text-sm"
           placeholder="e.g. 12 Sample St, Marsden Park NSW"
           value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && runAssessment()}
+          onChange={setAddress}
+          onSubmit={runAssessment}
         />
         <button
           onClick={runAssessment}

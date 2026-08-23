@@ -31,6 +31,7 @@ function sanitize(s: string): string {
 export function parseAddress(address: string): ParsedAddress | null {
   const stripped = address
     .replace(/\bNSW\b/gi, " ")
+    .replace(/\bAustralia\b/gi, " ")
     .replace(/\b\d{4}\b/g, " ")
     .replace(/,/g, " ")
     .trim();
