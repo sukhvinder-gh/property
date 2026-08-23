@@ -83,7 +83,7 @@ export function buildUtilitiesSummary(siteProfile: SiteProfile): UtilitiesSummar
       ? `${distributor} (regional LGA-based estimate — distributor boundaries don't always align with LGA lines; confirm before relying on this).`
       : "Unknown — verify via the relevant distributor's postcode checker (Ausgrid, Endeavour Energy, or Essential Energy).",
     otherServicesNote:
-      "Water/sewer, stormwater discharge, NBN, and gas availability, plus service relocation requirements, are not computable from any live source — confirm water/sewer via a Section 10.7 planning certificate or the relevant water utility, stormwater/OSD via the council's DCP (see Council controls above), NBN via nbnco.com.au, gas via the relevant network operator (e.g. Jemena), and commission a Dial Before You Dig (DBYD) enquiry before any excavation.",
+      "Water/sewer, stormwater discharge, NBN, and gas availability, plus service relocation requirements, are not computable from any live source — confirm water/sewer via a Section 10.7 planning certificate or the relevant water utility, stormwater/OSD via the council's DCP (see this report's Engineering section for this council's specific stormwater policy where deep-profiled), NBN via nbnco.com.au, gas via the relevant network operator (e.g. Jemena), and commission a Dial Before You Dig (DBYD) enquiry before any excavation.",
   };
 }
 
@@ -113,7 +113,11 @@ export function buildAccessSummary(siteProfile: SiteProfile): AccessSummary {
   };
 }
 
-export function buildEngineeringSummary(siteProfile: SiteProfile, constraints: Constraint[]): EngineeringSummary {
+export function buildEngineeringSummary(
+  siteProfile: SiteProfile,
+  constraints: Constraint[],
+  councilProfile?: CouncilProfile | null
+): EngineeringSummary {
   const massMovement = siteProfile.massMovementRating;
   let retainingWalls: string;
   if (massMovement === null && siteProfile.slopeClass === null) {
@@ -144,9 +148,12 @@ export function buildEngineeringSummary(siteProfile: SiteProfile, constraints: C
       ? `Elevated basement complexity indicated: ${basementConcerns.join(", ")} (all NSW Land and Soil Capability ratings are 1=best/8=worst) — likely to encounter rock and/or a high water table; commission a geotechnical/hydrogeological assessment before committing to a basement.`
       : "No elevated rock, waterlogging, groundwater, or flood risk found by these checks — a basement is not excluded, but a geotechnical/hydrogeological assessment is still required before committing to one.";
 
+  const stormwaterConcept = councilProfile?.stormwaterPolicy
+    ? `${councilProfile.stormwaterPolicy.summary} (${councilProfile.stormwaterPolicy.instrumentRef}) — a stormwater concept plan and on-site detention (OSD) are typically required under the Codes SEPP/council DCP for most dwellings.`
+    : "Not deep-profiled in this engine — a stormwater concept plan and on-site detention (OSD) are typically required under the Codes SEPP/council DCP for most dwellings; verify the specific council's engineering DCP chapter.";
+
   return {
-    stormwaterConcept:
-      "See the Council controls section above for this council's stormwater policy; a stormwater concept plan and on-site detention (OSD) are typically required under the Codes SEPP/council DCP for most dwellings.",
+    stormwaterConcept,
     rainwaterTank:
       "BASIX commonly requires a rainwater tank connected to toilet/laundry/irrigation for most new NSW dwellings — the specific target depends on the BASIX index score, not this site's location; confirm via the BASIX certificate.",
     retainingWalls,

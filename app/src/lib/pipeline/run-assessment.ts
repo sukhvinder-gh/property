@@ -56,7 +56,7 @@ export async function runAssessment(adapter: DataSourceAdapter, input: RunAssess
   const councilControls = buildCouncilControls(siteProfile, planningControls, councilProfile);
   const utilities = buildUtilitiesSummary(siteProfile);
   const access = buildAccessSummary(siteProfile);
-  const engineering = buildEngineeringSummary(siteProfile, constraints);
+  const engineering = buildEngineeringSummary(siteProfile, constraints, councilProfile);
   const environmental = buildEnvironmentalSummary(siteProfile, constraints);
   const constructionFeasibility = buildConstructionFeasibilitySummary(siteProfile, buildableEnvelope, councilProfile);
   const costAssessment = buildCostAssessmentSummary(costSignals);
