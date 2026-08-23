@@ -526,10 +526,15 @@ export function buildDevelopmentPotential(siteProfile: SiteProfile, planningCont
     secondaryEligible = false;
     secondaryReasoning = `Zone ${planningControls.zone} does not read as a standard residential zone — secondary dwellings are a residential-zone CDC pathway.`;
   } else {
-    secondaryEligible = siteProfile.lotSizeSqm >= SECONDARY_DWELLING_MIN_LOT_SQM && siteProfile.frontageM >= SECONDARY_DWELLING_MIN_FRONTAGE_M;
+    const lotSizeOk = siteProfile.lotSizeSqm >= SECONDARY_DWELLING_MIN_LOT_SQM;
+    const frontageOk = siteProfile.frontageM >= SECONDARY_DWELLING_MIN_FRONTAGE_M;
+    secondaryEligible = lotSizeOk && frontageOk;
+    const shortfalls: string[] = [];
+    if (!lotSizeOk) shortfalls.push(`lot size ${siteProfile.lotSizeSqm}m² (needs ≥${SECONDARY_DWELLING_MIN_LOT_SQM}m²)`);
+    if (!frontageOk) shortfalls.push(`frontage ${siteProfile.frontageM}m (needs ≥${SECONDARY_DWELLING_MIN_FRONTAGE_M}m)`);
     secondaryReasoning = secondaryEligible
       ? `Lot size ${siteProfile.lotSizeSqm}m² and frontage ${siteProfile.frontageM}m meet the NSW Housing SEPP 2021 CDC minimums (≥${SECONDARY_DWELLING_MIN_LOT_SQM}m², ≥${SECONDARY_DWELLING_MIN_FRONTAGE_M}m frontage, max 60m² dwelling) — verify current figures before relying on this.`
-      : `Lot size ${siteProfile.lotSizeSqm}m² or frontage ${siteProfile.frontageM}m falls short of the NSW Housing SEPP 2021 CDC minimums (≥${SECONDARY_DWELLING_MIN_LOT_SQM}m², ≥${SECONDARY_DWELLING_MIN_FRONTAGE_M}m frontage) — a secondary dwelling via CDC is unlikely, though a DA pathway may still be possible.`;
+      : `Falls short of the NSW Housing SEPP 2021 secondary-dwelling CDC minimums on ${shortfalls.join(" and ")} — a secondary dwelling via CDC is unlikely, though a DA pathway may still be possible.`;
   }
 
   let potentialLots: number | null = null;

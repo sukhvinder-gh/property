@@ -51,14 +51,23 @@ export function runStage6Scoring(
     note: `${blockers} blocker(s), ${costAdders} cost-adder(s) among checked constraints.`,
   });
 
+  // Per references/councils.md's confidence-by-tier table, a profiled council
+  // (deep profile below — councilProfile is non-null exactly then) gets full
+  // scoring regardless of DA-stats volume; the deep profile itself is the
+  // confidence source. DA-stats data-thinness only bands the verdict for
+  // unprofiled councils. The approval-rate sub-factor's own weight still
+  // halves on thin DA stats either way — that's a real gap in that one input,
+  // independent of overall tier confidence.
   const isDataThin = daStats.determinationsLast12Months < DATA_THIN_THRESHOLD;
+  const isProfiled = Boolean(councilProfile);
+  const shouldBandOverallScore = !isProfiled && isDataThin;
   const approvalRateWeight = isDataThin ? 7.5 : 15;
   let approvalContribution = 0;
   let approvalNote = "No DA determination history available for this council/DA type.";
   if (daStats.approvalRatePercent !== null) {
     approvalContribution = (daStats.approvalRatePercent / 100) * approvalRateWeight;
     approvalNote = `${daStats.approvalRatePercent}% approval rate over ${daStats.determinationsLast12Months} determinations (rolling 12mo)${
-      isDataThin ? " — data-thin council, weight halved and verdict banded" : ""
+      isDataThin ? (shouldBandOverallScore ? " — data-thin council, weight halved and verdict banded" : " — data-thin, weight halved, but council is deep-profiled so the overall verdict stays a point score") : ""
     }.`;
   }
   factors.push({
@@ -114,7 +123,7 @@ export function runStage6Scoring(
   const sortedDrivers = [...factors].sort((a, b) => b.contribution / b.weight - a.contribution / a.weight);
   const topDrivers = sortedDrivers.slice(0, 3).map((f) => `${f.factor}: ${f.note}`);
 
-  if (isDataThin) {
+  if (shouldBandOverallScore) {
     const band = bandForScore(score);
     const bandOrder: ScoreBand[] = ["Unlikely", "Marginal", "Viable", "Strong"];
     const idx = bandOrder.indexOf(band);
