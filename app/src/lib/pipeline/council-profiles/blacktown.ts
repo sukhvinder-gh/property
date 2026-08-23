@@ -34,35 +34,95 @@ export const blacktownProfile: CouncilProfile = {
       "Ties into \"prescribed trees\" under Blacktown LEP 2015 cl 5.9 — existing trees are to be preserved where feasible; changing ground levels near retained trees should be avoided, with retaining walls preferred over filling around root zones.",
     instrumentRef: "Blacktown DCP 2015 §4.3 / Blacktown LEP 2015 cl 5.9",
   },
-  // Sourced 2026-08 via web research corroborating the actual Blacktown LEP
-  // 2015 Land Use Table content (legislation.nsw.gov.au direct fetch was
-  // blocked; council's own fact-sheet PDF also blocked WebFetch). R2 is
-  // corroborated across independent searches — treat as a strong indication.
-  // R4 sourcing was thinner (one search only partially enumerated the list),
-  // so it's a shorter, more conservatively hedged list. A specific numeric
-  // dual-occupancy minimum lot size was also researched but NOT included
-  // here — sources disagreed (500-600m², 450-500m², "varies by precinct")
-  // and this engine doesn't publish a figure it can't pin down confidently.
+  // Full text of the Land Use Table supplied directly by the user 2026-08,
+  // copied from the current in-force page at legislation.nsw.gov.au (every
+  // automated fetch of this instrument was blocked from this session).
+  // Superseded and corrected an earlier, web-research-sourced version of
+  // this list that turned out to be wrong in places once checked against
+  // the real table — e.g. R2 does NOT include "Boarding houses", R3 does
+  // NOT include "Dual occupancies" — exactly the failure mode careful
+  // sourcing is meant to catch. Lists below are the full "permitted with
+  // consent" column, minus pure infrastructure/admin/niche entries (roads,
+  // signage, aquaculture, water reticulation, environmental/flood works)
+  // that aren't meaningful answers to "what can I build".
   permittedUsesByZone: {
-    R2: {
+    R1: {
       list: [
-        "Dwelling houses",
-        "Dual occupancies",
+        "Attached dwellings",
         "Bed and breakfast accommodation",
         "Boarding houses",
+        "Centre-based child care facilities",
         "Community facilities",
+        "Dual occupancies",
+        "Dwelling houses",
         "Group homes",
+        "Hostels",
+        "Multi dwelling housing",
+        "Neighbourhood shops",
+        "Places of public worship",
+        "Residential flat buildings",
+        "Respite day care centres",
+        "Semi-detached dwellings",
+        "Seniors housing",
+        "Shop top housing",
+      ],
+      summary: "The Blacktown LEP 2015 Zone R1 Land Use Table's full \"permitted with consent\" list (infrastructure/admin entries omitted).",
+      instrumentRef: "Blacktown LEP 2015, Zone R1 Land Use Table (full text, supplied by user)",
+    },
+    R2: {
+      list: [
+        "Bed and breakfast accommodation",
+        "Centre-based child care facilities",
+        "Community facilities",
+        "Dual occupancies",
+        "Dwelling houses",
+        "Group homes",
+        "Health consulting rooms",
+        "Places of public worship",
+        "Respite day care centres",
         "Seniors housing",
       ],
-      summary:
-        "The Blacktown LEP 2015 Zone R2 Land Use Table permits (with consent) at least: dwelling houses, dual occupancies, bed and breakfast accommodation, boarding houses, community facilities, group homes, and seniors housing.",
-      instrumentRef: "Blacktown LEP 2015, Zone R2 Land Use Table",
+      summary: "The Blacktown LEP 2015 Zone R2 Land Use Table's full \"permitted with consent\" list (infrastructure/admin entries omitted). Notably does NOT include boarding houses, multi dwelling housing, or residential flat buildings.",
+      instrumentRef: "Blacktown LEP 2015, Zone R2 Land Use Table (full text, supplied by user)",
+    },
+    R3: {
+      list: [
+        "Attached dwellings",
+        "Bed and breakfast accommodation",
+        "Boarding houses",
+        "Centre-based child care facilities",
+        "Community facilities",
+        "Dwelling houses",
+        "Group homes",
+        "Home occupations",
+        "Multi dwelling housing",
+        "Neighbourhood shops",
+        "Places of public worship",
+        "Respite day care centres",
+        "Seniors housing",
+        "Shop top housing",
+      ],
+      summary: "The Blacktown LEP 2015 Zone R3 Land Use Table's full \"permitted with consent\" list (infrastructure/admin entries omitted). Notably does NOT include dual occupancies or residential flat buildings.",
+      instrumentRef: "Blacktown LEP 2015, Zone R3 Land Use Table (full text, supplied by user)",
     },
     R4: {
-      list: ["Residential flat buildings", "Dwelling houses", "Boarding houses", "Community facilities"],
-      summary:
-        "The Blacktown LEP 2015 Zone R4 Land Use Table permits (with consent) at least: residential flat buildings, dwelling houses, boarding houses, and community facilities — sourcing for this zone was thinner than R2, so this list is more likely to be incomplete.",
-      instrumentRef: "Blacktown LEP 2015, Zone R4 Land Use Table",
+      list: [
+        "Boarding houses",
+        "Centre-based child care facilities",
+        "Community facilities",
+        "Dwelling houses",
+        "Home occupations",
+        "Hotel or motel accommodation",
+        "Neighbourhood shops",
+        "Places of public worship",
+        "Residential flat buildings",
+        "Respite day care centres",
+        "Seniors housing",
+        "Serviced apartments",
+        "Shop top housing",
+      ],
+      summary: "The Blacktown LEP 2015 Zone R4 Land Use Table's full \"permitted with consent\" list (infrastructure/admin entries omitted). Notably does NOT include dual occupancies or multi dwelling housing.",
+      instrumentRef: "Blacktown LEP 2015, Zone R4 Land Use Table (full text, supplied by user)",
     },
   },
 };

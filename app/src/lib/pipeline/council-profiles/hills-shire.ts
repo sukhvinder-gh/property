@@ -58,7 +58,7 @@ export const hillsShireProfile: CouncilProfile = {
         "Bed and breakfast accommodation",
       ],
       summary:
-        "The Hills LEP 2019 Zone R2 Land Use Table permits (with consent) at least: dwelling houses, dual occupancies, group homes, centre-based child care facilities, respite day care centres, home-based child care, health consulting rooms, and bed and breakfast accommodation.",
+        "The Hills LEP 2019 Zone R2 Land Use Table permits (with consent) at least: dwelling houses, dual occupancies, group homes, centre-based child care facilities, respite day care centres, home-based child care, health consulting rooms, and bed and breakfast accommodation. This list is drawn from web research corroborating the LEP's own table, not the full legislative text directly — treat as a strong indication, not a confirmed complete list.",
       instrumentRef: "The Hills LEP 2019, Zone R2 Land Use Table",
     },
   },

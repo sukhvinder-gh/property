@@ -548,7 +548,7 @@ export function buildPermittedUses(
     return {
       list: zoneOverlay.list,
       source: zoneOverlay.instrumentRef,
-      note: `${zoneOverlay.summary} This list is drawn from web research corroborating the LEP's own Land Use Table, not a direct legislative-text fetch — it may be incomplete; verify the full table before relying on it for a specific proposal.`,
+      note: `${zoneOverlay.summary} Verify the current Land Use Table before relying on this for a specific proposal — councils amend LEPs.`,
     };
   }
 
