@@ -6,6 +6,7 @@ import {
 } from "@/lib/pipeline/codes-sepp-constants";
 import type { CouncilProfile } from "@/lib/pipeline/council-profiles";
 import { getElectricityDistributor, getWaterUtility } from "@/lib/pipeline/electricity-distributor";
+import { STANDARD_ZONE_LAND_USE_TABLE } from "@/lib/pipeline/zone-land-use-table";
 import type {
   AccessSummary,
   ApprovalStrategySummary,
@@ -534,8 +535,46 @@ export function buildRisksAndUnknowns(
   return risks;
 }
 
-export function buildDevelopmentPotential(siteProfile: SiteProfile, planningControls: PlanningControls): DevelopmentPotential {
+export function buildPermittedUses(
+  planningControls: PlanningControls,
+  councilProfile?: CouncilProfile | null
+): DevelopmentPotential["permittedUses"] {
+  if (planningControls.zone === "Unknown") {
+    return { list: [], source: "Not available", note: "Zone could not be resolved — no permitted-use list can be determined." };
+  }
+
+  const zoneOverlay = councilProfile?.permittedUsesByZone?.[planningControls.zone];
+  if (zoneOverlay) {
+    return {
+      list: zoneOverlay.list,
+      source: zoneOverlay.instrumentRef,
+      note: `${zoneOverlay.summary} This list is drawn from web research corroborating the LEP's own Land Use Table, not a direct legislative-text fetch — it may be incomplete; verify the full table before relying on it for a specific proposal.`,
+    };
+  }
+
+  const generic = STANDARD_ZONE_LAND_USE_TABLE[planningControls.zone];
+  if (generic) {
+    return {
+      list: generic,
+      source: "NSW Standard Instrument—Principal LEP (generic template)",
+      note: `Typical "permitted with consent" uses for ${planningControls.zone} zones under the Standard Instrument template that most NSW LEPs are built from — this council's own LEP Land Use Table can add or remove specific uses, so treat this as a starting point, not a confirmed list for this address. Verify via the applicable LEP or a Section 10.7 planning certificate.`,
+    };
+  }
+
+  return {
+    list: [],
+    source: "Not available",
+    note: `No verified permitted-use list is available in this engine for zone ${planningControls.zone} — check this council's LEP Land Use Table directly via the NSW Planning Portal or a Section 10.7 planning certificate.`,
+  };
+}
+
+export function buildDevelopmentPotential(
+  siteProfile: SiteProfile,
+  planningControls: PlanningControls,
+  councilProfile?: CouncilProfile | null
+): DevelopmentPotential {
   const zonePermitsResidential = /^R/.test(planningControls.zone); // same check as stage6-scoring.ts's hard gate
+  const permittedUses = buildPermittedUses(planningControls, councilProfile);
 
   let newDwellingEligible: boolean | null = null;
   let newDwellingReasoning: string;
@@ -590,6 +629,7 @@ export function buildDevelopmentPotential(siteProfile: SiteProfile, planningCont
   }
 
   return {
+    permittedUses,
     newDwellingHouse: { eligible: newDwellingEligible, reasoning: newDwellingReasoning },
     secondaryDwelling: { eligible: secondaryEligible, reasoning: secondaryReasoning },
     dualOccupancy: {

@@ -40,4 +40,26 @@ export const hillsShireProfile: CouncilProfile = {
       "Landscape works must include provision for adequate drainage, including collection/dispersal of stormwater run-off and prevention of ponding or discharge onto adjoining properties (§3.5(a)). On-site detention (OSD) tanks/above-ground structures should not be located in the front setback — the preferred location is within or under the driveway; if placed under a landscaped area, a minimum 300mm soil cover is required over the tank (§3.5(e)).",
     instrumentRef: "The Hills DCP 2012 Part C Section 3 — Landscaping §3.5",
   },
+  // Sourced 2026-08 via web research corroborating the actual Hills LEP 2019
+  // Land Use Table content (legislation.nsw.gov.au direct fetch was blocked;
+  // this list is what multiple independent search results agreed on for
+  // R2 — treat as a strong indication, not a substitute for reading the LEP
+  // clause itself before relying on it for a specific proposal).
+  permittedUsesByZone: {
+    R2: {
+      list: [
+        "Dwelling houses",
+        "Dual occupancies",
+        "Group homes",
+        "Centre-based child care facilities",
+        "Respite day care centres",
+        "Home-based child care",
+        "Health consulting rooms",
+        "Bed and breakfast accommodation",
+      ],
+      summary:
+        "The Hills LEP 2019 Zone R2 Land Use Table permits (with consent) at least: dwelling houses, dual occupancies, group homes, centre-based child care facilities, respite day care centres, home-based child care, health consulting rooms, and bed and breakfast accommodation.",
+      instrumentRef: "The Hills LEP 2019, Zone R2 Land Use Table",
+    },
+  },
 };

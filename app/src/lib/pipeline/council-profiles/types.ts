@@ -29,4 +29,12 @@ export interface CouncilProfile {
   streetscapeCharacter?: CouncilControlNote;
   stormwaterPolicy?: CouncilControlNote;
   viewSharing?: CouncilControlNote;
+  /**
+   * LEP Land Use Table "permitted with consent" entries, verified against
+   * this specific council's own LEP for the given zone code — takes
+   * priority over the generic Standard Instrument table in
+   * zone-land-use-table.ts when present. Keyed by zone code (e.g. "R2").
+   * Omit a zone rather than guess its list from another council's LEP.
+   */
+  permittedUsesByZone?: Record<string, CouncilControlNote & { list: string[] }>;
 }

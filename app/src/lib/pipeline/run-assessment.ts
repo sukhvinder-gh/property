@@ -52,7 +52,7 @@ export async function runAssessment(adapter: DataSourceAdapter, input: RunAssess
   const risksAndUnknowns = buildRisksAndUnknowns(siteProfile, buildableEnvelope, constraints);
   const riskRegister = buildRiskRegister(siteProfile, planningControls, constraints);
   const nextSteps = buildNextSteps(pathway, siteProfile);
-  const developmentPotential = buildDevelopmentPotential(siteProfile, planningControls);
+  const developmentPotential = buildDevelopmentPotential(siteProfile, planningControls, councilProfile);
   const councilControls = buildCouncilControls(siteProfile, planningControls, councilProfile);
   const utilities = buildUtilitiesSummary(siteProfile);
   const access = buildAccessSummary(siteProfile);

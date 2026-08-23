@@ -191,7 +191,20 @@ export function ReportView({ record }: { record: AssessmentRecord }) {
 
       <section>
         <h3 className="font-semibold">What you can likely build</h3>
-        <ul className="mt-1 list-disc pl-5">
+        {record.developmentPotential.permittedUses.list.length > 0 && (
+          <div className="mt-1 text-sm">
+            <p>
+              Permitted uses for zone {planningControls.zone} ({record.developmentPotential.permittedUses.source}):
+            </p>
+            <ul className="mt-1 list-disc pl-5">
+              {record.developmentPotential.permittedUses.list.map((u, i) => (
+                <li key={i}>{u}</li>
+              ))}
+            </ul>
+            <p className="mt-1 text-xs text-neutral-600">{record.developmentPotential.permittedUses.note}</p>
+          </div>
+        )}
+        <ul className="mt-2 list-disc pl-5">
           <li>
             New dwelling house:{" "}
             {record.developmentPotential.newDwellingHouse.eligible === null
