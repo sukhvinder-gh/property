@@ -13,34 +13,55 @@ function renderInline(line: string) {
   );
 }
 
-/** Renders "- " lines as a bullet list, other lines as plain paragraphs, and "**bold**" spans inline. */
+/** Renders "- " lines as a bullet list, "#" lines as headings, "---" as a rule, everything else as paragraphs, with "**bold**" spans inline throughout. Defensive against the model reaching for markdown despite the system prompt discouraging it. */
 function FormattedText({ text }: { text: string }) {
   const lines = text.split("\n");
-  const blocks: { type: "list" | "text"; lines: string[] }[] = [];
+  const blocks: { type: "list" | "text" | "heading" | "rule"; lines: string[] }[] = [];
   for (const line of lines) {
     const isBullet = /^\s*[-•]\s+/.test(line);
+    const isHeading = /^#{1,6}\s+/.test(line);
+    const isRule = /^\s*(-{3,}|\*{3,})\s*$/.test(line);
     const last = blocks[blocks.length - 1];
-    if (isBullet && last?.type === "list") last.lines.push(line.replace(/^\s*[-•]\s+/, ""));
-    else if (isBullet) blocks.push({ type: "list", lines: [line.replace(/^\s*[-•]\s+/, "")] });
-    else if (line.trim() === "") continue;
-    else if (last?.type === "text") last.lines.push(line);
-    else blocks.push({ type: "text", lines: [line] });
+    if (isRule) {
+      blocks.push({ type: "rule", lines: [] });
+    } else if (isHeading) {
+      blocks.push({ type: "heading", lines: [line.replace(/^#{1,6}\s+/, "")] });
+    } else if (isBullet && last?.type === "list") {
+      last.lines.push(line.replace(/^\s*[-•]\s+/, ""));
+    } else if (isBullet) {
+      blocks.push({ type: "list", lines: [line.replace(/^\s*[-•]\s+/, "")] });
+    } else if (line.trim() === "") {
+      continue;
+    } else if (last?.type === "text") {
+      last.lines.push(line);
+    } else {
+      blocks.push({ type: "text", lines: [line] });
+    }
   }
   return (
     <>
-      {blocks.map((block, i) =>
-        block.type === "list" ? (
-          <ul key={i} className="list-disc space-y-0.5 pl-4">
-            {block.lines.map((l, j) => (
-              <li key={j}>{renderInline(l)}</li>
-            ))}
-          </ul>
-        ) : (
+      {blocks.map((block, i) => {
+        if (block.type === "rule") return <hr key={i} className="my-2 border-t border-neutral-300" />;
+        if (block.type === "heading")
+          return (
+            <p key={i} className={`font-semibold ${i > 0 ? "mt-2" : ""}`}>
+              {renderInline(block.lines[0])}
+            </p>
+          );
+        if (block.type === "list")
+          return (
+            <ul key={i} className="list-disc space-y-0.5 pl-4">
+              {block.lines.map((l, j) => (
+                <li key={j}>{renderInline(l)}</li>
+              ))}
+            </ul>
+          );
+        return (
           <p key={i} className={i > 0 ? "mt-2" : undefined}>
             {renderInline(block.lines.join(" "))}
           </p>
-        ),
-      )}
+        );
+      })}
     </>
   );
 }
