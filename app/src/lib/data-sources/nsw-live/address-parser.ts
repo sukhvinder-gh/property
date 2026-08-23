@@ -32,6 +32,57 @@ function sanitizeHouseNumber(s: string): string {
 }
 
 /**
+ * Common Australia Post street-type abbreviations, expanded to the full word
+ * NSW_Property's `address` field consistently uses (verified live: "ROAD",
+ * "STREET", "AVENUE" etc. are always spelled out there, never abbreviated).
+ * Without this, an exact-match token like "RD" never matches a stored
+ * "ROAD" — "RD" is not literally a substring of "ROAD" — so a correctly
+ * spelled address using the everyday abbreviation would honestly, but
+ * needlessly, fail to resolve.
+ *
+ * Deliberately excludes "ST": genuinely ambiguous between "Street" (a
+ * suffix) and "Saint" (a suburb-name prefix — St Marys, St Ives, St Clair,
+ * St Andrews are all real NSW suburbs), and nothing in a flat token list
+ * reliably distinguishes which. Per the "never guess" rule, "St" is left
+ * unexpanded rather than risk turning "St Marys" into "Street Marys".
+ */
+const STREET_TYPE_EXPANSIONS: Record<string, string> = {
+  RD: "ROAD",
+  AVE: "AVENUE",
+  AV: "AVENUE",
+  CRES: "CRESCENT",
+  CT: "COURT",
+  CRT: "COURT",
+  DR: "DRIVE",
+  PL: "PLACE",
+  PDE: "PARADE",
+  CL: "CLOSE",
+  TCE: "TERRACE",
+  HWY: "HIGHWAY",
+  BVD: "BOULEVARD",
+  BLVD: "BOULEVARD",
+  GR: "GROVE",
+  CCT: "CIRCUIT",
+  SQ: "SQUARE",
+  GDNS: "GARDENS",
+  PKWY: "PARKWAY",
+  ESP: "ESPLANADE",
+  LN: "LANE",
+  HTS: "HEIGHTS",
+  GRN: "GREEN",
+  RDGE: "RIDGE",
+  ALY: "ALLEY",
+  CIR: "CIRCLE",
+  PLZ: "PLAZA",
+  PROM: "PROMENADE",
+  VLG: "VILLAGE",
+};
+
+function expandStreetType(token: string): string {
+  return STREET_TYPE_EXPANSIONS[token] ?? token;
+}
+
+/**
  * Best-effort parser for "NUMBER STREET[, ]SUBURB [NSW] [POSTCODE]" style
  * addresses against the NSW_Property address field (verified live: `address`
  * is a combined "STREET SUBURB" string). Comma is optional and not load-
@@ -59,7 +110,8 @@ export function parseAddress(address: string): ParsedAddress | null {
   const [, houseNumber, rest] = houseMatch;
   const tokens = sanitize(rest)
     .split(" ")
-    .filter((t) => t.length > 0);
+    .filter((t) => t.length > 0)
+    .map(expandStreetType);
   if (tokens.length < 2) return null;
 
   return { houseNumber: sanitizeHouseNumber(houseNumber), tokens };
