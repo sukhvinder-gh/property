@@ -34,4 +34,35 @@ export const blacktownProfile: CouncilProfile = {
       "Ties into \"prescribed trees\" under Blacktown LEP 2015 cl 5.9 — existing trees are to be preserved where feasible; changing ground levels near retained trees should be avoided, with retaining walls preferred over filling around root zones.",
     instrumentRef: "Blacktown DCP 2015 §4.3 / Blacktown LEP 2015 cl 5.9",
   },
+  // Sourced 2026-08 via web research corroborating the actual Blacktown LEP
+  // 2015 Land Use Table content (legislation.nsw.gov.au direct fetch was
+  // blocked; council's own fact-sheet PDF also blocked WebFetch). R2 is
+  // corroborated across independent searches — treat as a strong indication.
+  // R4 sourcing was thinner (one search only partially enumerated the list),
+  // so it's a shorter, more conservatively hedged list. A specific numeric
+  // dual-occupancy minimum lot size was also researched but NOT included
+  // here — sources disagreed (500-600m², 450-500m², "varies by precinct")
+  // and this engine doesn't publish a figure it can't pin down confidently.
+  permittedUsesByZone: {
+    R2: {
+      list: [
+        "Dwelling houses",
+        "Dual occupancies",
+        "Bed and breakfast accommodation",
+        "Boarding houses",
+        "Community facilities",
+        "Group homes",
+        "Seniors housing",
+      ],
+      summary:
+        "The Blacktown LEP 2015 Zone R2 Land Use Table permits (with consent) at least: dwelling houses, dual occupancies, bed and breakfast accommodation, boarding houses, community facilities, group homes, and seniors housing.",
+      instrumentRef: "Blacktown LEP 2015, Zone R2 Land Use Table",
+    },
+    R4: {
+      list: ["Residential flat buildings", "Dwelling houses", "Boarding houses", "Community facilities"],
+      summary:
+        "The Blacktown LEP 2015 Zone R4 Land Use Table permits (with consent) at least: residential flat buildings, dwelling houses, boarding houses, and community facilities — sourcing for this zone was thinner than R2, so this list is more likely to be incomplete.",
+      instrumentRef: "Blacktown LEP 2015, Zone R4 Land Use Table",
+    },
+  },
 };
