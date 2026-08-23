@@ -137,6 +137,12 @@ export const ScoreResultSchema = z.object({
 export type ScoreResult = z.infer<typeof ScoreResultSchema>;
 
 export const DevelopmentPotentialSchema = z.object({
+  newDwellingHouse: z.object({
+    // null = insufficient data (never a guessed false); true/false only when
+    // zone + lot size + frontage are all known.
+    eligible: z.boolean().nullable(),
+    reasoning: z.string(),
+  }),
   secondaryDwelling: z.object({
     // null = insufficient data (never a guessed false); true/false only when
     // zone + lot size + frontage are all known.

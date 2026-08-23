@@ -1,4 +1,9 @@
-import { SECONDARY_DWELLING_MIN_FRONTAGE_M, SECONDARY_DWELLING_MIN_LOT_SQM } from "@/lib/pipeline/codes-sepp-constants";
+import {
+  NEW_DWELLING_HOUSE_DEFAULT_MIN_LOT_SQM,
+  NEW_DWELLING_HOUSE_MIN_WIDTH_M,
+  SECONDARY_DWELLING_MIN_FRONTAGE_M,
+  SECONDARY_DWELLING_MIN_LOT_SQM,
+} from "@/lib/pipeline/codes-sepp-constants";
 import type { CouncilProfile } from "@/lib/pipeline/council-profiles";
 import { getElectricityDistributor, getWaterUtility } from "@/lib/pipeline/electricity-distributor";
 import type {
@@ -532,6 +537,27 @@ export function buildRisksAndUnknowns(
 export function buildDevelopmentPotential(siteProfile: SiteProfile, planningControls: PlanningControls): DevelopmentPotential {
   const zonePermitsResidential = /^R/.test(planningControls.zone); // same check as stage6-scoring.ts's hard gate
 
+  let newDwellingEligible: boolean | null = null;
+  let newDwellingReasoning: string;
+  if (siteProfile.lotSizeSqm === null || siteProfile.frontageM === null) {
+    newDwellingReasoning = "Insufficient data (lot size and/or frontage unconfirmed) to determine new dwelling house CDC eligibility.";
+  } else if (!zonePermitsResidential) {
+    newDwellingEligible = false;
+    newDwellingReasoning = `Zone ${planningControls.zone} does not read as a standard residential zone — a new dwelling house is a residential-zone CDC pathway.`;
+  } else {
+    const effectiveMinLotSqm = planningControls.minLotSizeSqm ?? NEW_DWELLING_HOUSE_DEFAULT_MIN_LOT_SQM;
+    const lotSizeSource = planningControls.minLotSizeSqm !== null ? "this lot's own LEP minimum lot size (live LSZ layer)" : "the Housing Code's 200m² default (no LEP-specific minimum found)";
+    const lotSizeOk = siteProfile.lotSizeSqm >= effectiveMinLotSqm;
+    const widthOk = siteProfile.frontageM >= NEW_DWELLING_HOUSE_MIN_WIDTH_M;
+    newDwellingEligible = lotSizeOk && widthOk;
+    const shortfalls: string[] = [];
+    if (!lotSizeOk) shortfalls.push(`lot size ${siteProfile.lotSizeSqm}m² (needs ≥${effectiveMinLotSqm}m², from ${lotSizeSource})`);
+    if (!widthOk) shortfalls.push(`width ${siteProfile.frontageM}m (needs ≥${NEW_DWELLING_HOUSE_MIN_WIDTH_M}m at the building line — this uses the lot's bounding-box frontage as a proxy, not the exact building-line width)`);
+    newDwellingReasoning = newDwellingEligible
+      ? `Lot size ${siteProfile.lotSizeSqm}m² and width ${siteProfile.frontageM}m meet the Housing Code CDC minimums for a new dwelling house (≥${effectiveMinLotSqm}m² from ${lotSizeSource}, ≥${NEW_DWELLING_HOUSE_MIN_WIDTH_M}m width) — verify current figures and full Codes SEPP compliance (setbacks, height, site coverage) before relying on this.`
+      : `Falls short of the Housing Code CDC minimums for a new dwelling house on ${shortfalls.join(" and ")} — CDC is unlikely, though a DA pathway may still be possible.`;
+  }
+
   let secondaryEligible: boolean | null = null;
   let secondaryReasoning: string;
   if (siteProfile.lotSizeSqm === null || siteProfile.frontageM === null) {
@@ -564,6 +590,7 @@ export function buildDevelopmentPotential(siteProfile: SiteProfile, planningCont
   }
 
   return {
+    newDwellingHouse: { eligible: newDwellingEligible, reasoning: newDwellingReasoning },
     secondaryDwelling: { eligible: secondaryEligible, reasoning: secondaryReasoning },
     dualOccupancy: {
       likelyPermitted: null,

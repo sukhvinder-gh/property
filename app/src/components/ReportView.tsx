@@ -193,6 +193,15 @@ export function ReportView({ record }: { record: AssessmentRecord }) {
         <h3 className="font-semibold">What you can likely build</h3>
         <ul className="mt-1 list-disc pl-5">
           <li>
+            New dwelling house:{" "}
+            {record.developmentPotential.newDwellingHouse.eligible === null
+              ? "insufficient data"
+              : record.developmentPotential.newDwellingHouse.eligible
+                ? "likely eligible"
+                : "unlikely eligible"}{" "}
+            — {record.developmentPotential.newDwellingHouse.reasoning}
+          </li>
+          <li>
             Secondary dwelling (granny flat):{" "}
             {record.developmentPotential.secondaryDwelling.eligible === null
               ? "insufficient data"
