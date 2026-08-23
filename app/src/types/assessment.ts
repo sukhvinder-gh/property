@@ -154,11 +154,11 @@ export const DevelopmentPotentialSchema = z.object({
     eligible: z.boolean().nullable(),
     reasoning: z.string(),
   }),
-  // Deliberately always null — dual-occ permissibility is council-DCP-divergent,
-  // not a state-level rule (see references/councils.md); a computed yes/no here
-  // would be exactly the kind of overconfident guess this app avoids elsewhere.
+  // Dual-occ permissibility is council-DCP-divergent (see references/councils.md)
+  // so this stays null (never a guess) unless the council profile has a
+  // verified, LEP-clause-cited minimum lot size for this exact zone.
   dualOccupancy: z.object({
-    likelyPermitted: z.null(),
+    likelyPermitted: z.boolean().nullable(),
     reasoning: z.string(),
   }),
   subdivision: z.object({

@@ -568,6 +568,62 @@ export function buildPermittedUses(
   };
 }
 
+function buildDualOccupancy(
+  siteProfile: SiteProfile,
+  planningControls: PlanningControls,
+  councilProfile?: CouncilProfile | null
+): DevelopmentPotential["dualOccupancy"] {
+  const zone = planningControls.zone;
+  const attached = councilProfile?.minLotSizeByUseAndZone?.["Dual occupancy (attached)"]?.[zone];
+  const detached = councilProfile?.minLotSizeByUseAndZone?.["Dual occupancy (detached)"]?.[zone];
+
+  if (!attached && !detached) {
+    return {
+      likelyPermitted: null,
+      reasoning:
+        "Dual-occupancy permissibility is set by each council's own LEP Land Use Table and varies materially between councils — never generalised from one LGA to another in this engine. Check the specific zone's permitted-use table for this LGA, or book a council pre-DA meeting.",
+    };
+  }
+  if (siteProfile.lotSizeSqm === null) {
+    return {
+      likelyPermitted: null,
+      reasoning: "Insufficient data (lot size unconfirmed) to check dual occupancy against this council's verified minimum lot size.",
+    };
+  }
+
+  const parts: string[] = [];
+  let anyEligible = false;
+  if (attached) {
+    const ok = siteProfile.lotSizeSqm >= attached.areaSqm;
+    anyEligible = anyEligible || ok;
+    parts.push(`Attached dual occupancy: ${ok ? "eligible" : "ineligible"} by lot size (needs ≥${attached.areaSqm}m², this lot is ${siteProfile.lotSizeSqm}m² — ${attached.clauseRef}).`);
+  }
+  if (detached) {
+    const ok = siteProfile.lotSizeSqm >= detached.areaSqm;
+    anyEligible = anyEligible || ok;
+    parts.push(`Detached dual occupancy: ${ok ? "eligible" : "ineligible"} by lot size (needs ≥${detached.areaSqm}m², this lot is ${siteProfile.lotSizeSqm}m² — ${detached.clauseRef}).`);
+  }
+
+  // Bonus detail, same clause family — manor house and multi dwelling housing
+  // often come up alongside dual occupancy for a lot this size; surface them
+  // if this council has verified figures for this zone, rather than making
+  // the user ask a second question to get it.
+  const manor = councilProfile?.minLotSizeByUseAndZone?.["Manor house"]?.[zone];
+  if (manor) {
+    const ok = siteProfile.lotSizeSqm >= manor.areaSqm;
+    parts.push(`Manor house: ${ok ? "eligible" : "ineligible"} by lot size (needs ≥${manor.areaSqm}m² — ${manor.clauseRef}).`);
+  }
+  const multiDwelling = councilProfile?.minLotSizeByUseAndZone?.["Multi dwelling housing"]?.[zone];
+  if (multiDwelling) {
+    const ok = siteProfile.lotSizeSqm >= multiDwelling.areaSqm;
+    parts.push(`Multi dwelling housing: ${ok ? "eligible" : "below the standard threshold"} by lot size (needs ≥${multiDwelling.areaSqm}m² — ${multiDwelling.clauseRef}).`);
+  }
+
+  parts.push("Lot size is only one test — zoning permissibility, frontage, and DCP controls also apply before relying on this.");
+
+  return { likelyPermitted: anyEligible, reasoning: parts.join(" ") };
+}
+
 export function buildDevelopmentPotential(
   siteProfile: SiteProfile,
   planningControls: PlanningControls,
@@ -632,11 +688,7 @@ export function buildDevelopmentPotential(
     permittedUses,
     newDwellingHouse: { eligible: newDwellingEligible, reasoning: newDwellingReasoning },
     secondaryDwelling: { eligible: secondaryEligible, reasoning: secondaryReasoning },
-    dualOccupancy: {
-      likelyPermitted: null,
-      reasoning:
-        "Dual-occupancy permissibility is set by each council's own LEP Land Use Table and varies materially between councils — never generalised from one LGA to another in this engine. Check the specific zone's permitted-use table for this LGA, or book a council pre-DA meeting.",
-    },
+    dualOccupancy: buildDualOccupancy(siteProfile, planningControls, councilProfile),
     subdivision: { potentialLots, reasoning: subdivisionReasoning },
   };
 }

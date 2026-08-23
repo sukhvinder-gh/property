@@ -62,4 +62,46 @@ export const hillsShireProfile: CouncilProfile = {
       instrumentRef: "The Hills LEP 2019, Zone R2 Land Use Table",
     },
   },
+  // Full text of cl 4.1A supplied directly by the user 2026-08 (AustLII fetch
+  // was blocked from this session) — every figure below is transcribed
+  // directly from that clause, not researched/estimated. Areas normalised to
+  // m² (1 hectare = 10,000 m²). Note cl 4.1A(3): consent CAN still be granted
+  // for multi dwelling housing / residential flat buildings below the R3/R4
+  // figures below if the consent authority is satisfied on 4 design criteria
+  // (built-form compatibility, acoustic/visual privacy, passive solar design,
+  // vegetation retention) — so those two are a soft floor, not a hard gate,
+  // unlike dual occupancy and manor house which have no such exception.
+  //
+  // Separately, cl 4.1AA (community title schemes) was also supplied — it
+  // does NOT set a different number: it just applies the same Lot Size Map
+  // figure (already live via planningControls.minLotSizeSqm) to community
+  // title subdivisions specifically, and explicitly does not apply to strata
+  // plans. It's not modelled here since it adds no new figure — Torrens-style
+  // subdivision uses the general Lot Size Map minimum directly.
+  minLotSizeByUseAndZone: {
+    "Dual occupancy (attached)": {
+      R1: { areaSqm: 1800, clauseRef: "The Hills LEP 2019 cl 4.1A" },
+      R2: { areaSqm: 600, clauseRef: "The Hills LEP 2019 cl 4.1A" },
+      R3: { areaSqm: 600, clauseRef: "The Hills LEP 2019 cl 4.1A" },
+      R4: { areaSqm: 1800, clauseRef: "The Hills LEP 2019 cl 4.1A" },
+    },
+    "Dual occupancy (detached)": {
+      R1: { areaSqm: 1800, clauseRef: "The Hills LEP 2019 cl 4.1A" },
+      R2: { areaSqm: 700, clauseRef: "The Hills LEP 2019 cl 4.1A" },
+      R3: { areaSqm: 700, clauseRef: "The Hills LEP 2019 cl 4.1A" },
+      R4: { areaSqm: 1800, clauseRef: "The Hills LEP 2019 cl 4.1A" },
+    },
+    "Manor house": {
+      R3: { areaSqm: 900, clauseRef: "The Hills LEP 2019 cl 4.1A" },
+    },
+    "Multi dwelling housing": {
+      R1: { areaSqm: 1800, clauseRef: "The Hills LEP 2019 cl 4.1A(2) — cl 4.1A(3) allows consent below this figure subject to design criteria" },
+      R3: { areaSqm: 1800, clauseRef: "The Hills LEP 2019 cl 4.1A(2) — cl 4.1A(3) allows consent below this figure subject to design criteria" },
+      R4: { areaSqm: 1800, clauseRef: "The Hills LEP 2019 cl 4.1A(2) — cl 4.1A(3) allows consent below this figure subject to design criteria" },
+    },
+    "Residential flat building": {
+      R1: { areaSqm: 4000, clauseRef: "The Hills LEP 2019 cl 4.1A(2) — cl 4.1A(3) allows consent below this figure subject to design criteria" },
+      R4: { areaSqm: 4000, clauseRef: "The Hills LEP 2019 cl 4.1A(2) — cl 4.1A(3) allows consent below this figure subject to design criteria" },
+    },
+  },
 };

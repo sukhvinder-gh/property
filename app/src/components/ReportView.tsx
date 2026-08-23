@@ -224,7 +224,13 @@ export function ReportView({ record }: { record: AssessmentRecord }) {
             — {record.developmentPotential.secondaryDwelling.reasoning}
           </li>
           <li>
-            Dual occupancy: requires council-specific check — {record.developmentPotential.dualOccupancy.reasoning}
+            Dual occupancy:{" "}
+            {record.developmentPotential.dualOccupancy.likelyPermitted === null
+              ? "requires council-specific check"
+              : record.developmentPotential.dualOccupancy.likelyPermitted
+                ? "likely eligible"
+                : "unlikely eligible"}{" "}
+            — {record.developmentPotential.dualOccupancy.reasoning}
           </li>
           <li>
             Subdivision:{" "}

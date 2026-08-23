@@ -37,4 +37,13 @@ export interface CouncilProfile {
    * Omit a zone rather than guess its list from another council's LEP.
    */
   permittedUsesByZone?: Record<string, CouncilControlNote & { list: string[] }>;
+  /**
+   * LEP-specific minimum lot size (m²) for development consent to a given
+   * dwelling type in a given zone — e.g. The Hills LEP 2019 cl 4.1A sets a
+   * materially different minimum per type (dual occupancy attached/detached,
+   * manor house, multi dwelling housing, residential flat building) than the
+   * general subdivision Lot Size Map figure. Keyed by development type then
+   * zone code. Verified against the actual clause text — never guessed.
+   */
+  minLotSizeByUseAndZone?: Record<string, Record<string, { areaSqm: number; clauseRef: string }>>;
 }
