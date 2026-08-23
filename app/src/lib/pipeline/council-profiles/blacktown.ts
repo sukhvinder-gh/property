@@ -125,4 +125,37 @@ export const blacktownProfile: CouncilProfile = {
       instrumentRef: "Blacktown LEP 2015, Zone R4 Land Use Table (full text, supplied by user)",
     },
   },
+  // Full text of cl 4.1B and 4.1C supplied directly by the user 2026-08
+  // (same session, same blocked-fetch situation as the Land Use Table
+  // above). Blacktown's table is narrower than Hills Shire's cl 4.1A — no
+  // R4 entries at all, and no "manor house" provision exists in this LEP.
+  // "Attached dwelling" (R3, 900m²) is its own distinct row, separate from
+  // dual occupancy.
+  minLotSizeByUseAndZone: {
+    "Attached dwelling": {
+      R3: { areaSqm: 900, clauseRef: "Blacktown LEP 2015 cl 4.1B" },
+    },
+    "Dual occupancy (attached)": {
+      R2: { areaSqm: 500, clauseRef: "Blacktown LEP 2015 cl 4.1B" },
+    },
+    "Dual occupancy (detached)": {
+      // cl 4.1B (500/600m²) only gates DEVELOPMENT CONSENT to build it —
+      // splitting it into 2 separately-titled lots afterward is a further,
+      // separate test under cl 4.1C: each resulting lot must independently
+      // meet this site's own Lot Size Map minimum (planningControls.
+      // minLotSizeSqm), UNLESS it's a corner lot with each dwelling
+      // fronting a different road, in which case each lot only needs
+      // ≥300m². This is the actual "can I get 2 separate Torrens titles"
+      // test for a Blacktown detached duplex — surfaced in the clause
+      // citation itself so it reaches the report/chat without a new field.
+      R2: {
+        areaSqm: 600,
+        clauseRef:
+          "Blacktown LEP 2015 cl 4.1B (consent to build). Splitting it into 2 separate titles afterward is a further test under cl 4.1C: each resulting lot must meet this site's own Lot Size Map minimum, or ≥300m² each if it's a corner lot with each dwelling fronting a different road",
+      },
+    },
+    "Multi dwelling housing": {
+      R3: { areaSqm: 1800, clauseRef: "Blacktown LEP 2015 cl 4.1B" },
+    },
+  },
 };

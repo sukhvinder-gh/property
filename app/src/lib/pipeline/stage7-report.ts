@@ -613,6 +613,11 @@ function buildDualOccupancy(
     const ok = siteProfile.lotSizeSqm >= manor.areaSqm;
     parts.push(`Manor house: ${ok ? "eligible" : "ineligible"} by lot size (needs ≥${manor.areaSqm}m² — ${manor.clauseRef}).`);
   }
+  const attachedDwelling = councilProfile?.minLotSizeByUseAndZone?.["Attached dwelling"]?.[zone];
+  if (attachedDwelling) {
+    const ok = siteProfile.lotSizeSqm >= attachedDwelling.areaSqm;
+    parts.push(`Attached dwelling (single, not dual occupancy): ${ok ? "eligible" : "ineligible"} by lot size (needs ≥${attachedDwelling.areaSqm}m² — ${attachedDwelling.clauseRef}).`);
+  }
   const multiDwelling = councilProfile?.minLotSizeByUseAndZone?.["Multi dwelling housing"]?.[zone];
   if (multiDwelling) {
     const ok = siteProfile.lotSizeSqm >= multiDwelling.areaSqm;
