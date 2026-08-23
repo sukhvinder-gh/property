@@ -1,5 +1,6 @@
 import dynamic from "next/dynamic";
 import type { AssessmentRecord } from "@/types/assessment";
+import { FinancialFeasibilityCalculator } from "@/components/FinancialFeasibilityCalculator";
 
 const MassingView = dynamic(() => import("@/components/MassingView").then((m) => m.MassingView), {
   ssr: false,
@@ -273,6 +274,8 @@ export function ReportView({ record }: { record: AssessmentRecord }) {
           ))}
         </ul>
       </section>
+
+      <FinancialFeasibilityCalculator />
 
       <section>
         <h3 className="font-semibold">Approval pathway & timeline</h3>
