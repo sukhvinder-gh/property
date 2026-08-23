@@ -24,7 +24,6 @@ import {
   type ArcGisFeature,
 } from "@/lib/data-sources/nsw-live/arcgis";
 import { parseAddress } from "@/lib/data-sources/nsw-live/address-parser";
-import { addressSimilarity, FUZZY_MATCH_THRESHOLD } from "@/lib/data-sources/nsw-live/fuzzy-match";
 import { isCouncilProfiled } from "@/lib/pipeline/council-profiles";
 
 /**
@@ -140,48 +139,27 @@ async function queryPropertyLayers(where: string): Promise<ArcGisFeature[]> {
 
 export interface PropertyMatch {
   feature: ArcGisFeature;
-  fuzzy: boolean;
-  matchedAddress: string | null;
 }
 
 /**
- * Exact substring match first (fast path, no ambiguity). If that finds
- * nothing, NSW_Property's address search has no typo tolerance at all — a
- * single spelling variant (Allan/Alan, "St"/"Street") silently resolves to
- * zero results — so fall back to a broader query scoped by house number +
- * suburb (the last 1-2 tokens, less prone to street-level typos) and pick
- * the best fuzzy match against the full token list, only if it clears
- * FUZZY_MATCH_THRESHOLD. Below that, stays honestly unresolved rather than
- * guessing a property the user didn't mean.
+ * Exact substring match only — house number plus every remaining address
+ * token, in order, as a wildcarded chain. Deliberately no fuzzy fallback:
+ * an earlier version fell back to a broader house-number + suburb-only
+ * query (dropping the actual street name) and picked the best-scoring
+ * candidate. Verified live this is unsafe — "8 Poole Road, Kellyville"
+ * falls back to matching against 55 completely unrelated streets sharing
+ * only "Road"/"Kellyville" (8 Rosebery Road, 8 Jupiter Road, 8 Greenwood
+ * Road, ...), any of which can outscore the real (non-existent, in that
+ * case) match by coincidence and get returned as if it were correct. A
+ * confidently wrong street match is worse than an honest "unresolved" —
+ * per SKILL.md's "never guess a control value", the same logic applies to
+ * guessing *which property* the address means.
  */
 async function findPropertyFeature(parsed: { houseNumber: string; tokens: string[] }): Promise<PropertyMatch | null> {
   const exactWhere = `housenumber='${parsed.houseNumber}' AND UPPER(address) LIKE '%${parsed.tokens.join("%")}%'`;
   const exact = await queryPropertyLayers(exactWhere);
-  if (exact.length > 0) {
-    return { feature: exact[0], fuzzy: false, matchedAddress: (exact[0].attributes.address as string | undefined) ?? null };
-  }
-
-  // Score every candidate — a growth-area suburb like Box Hill can return 100+
-  // same-house-number results (repetitive street-naming themes), and the
-  // real match is not guaranteed to be near the front of an unsorted list.
-  const suburbTokens = parsed.tokens.slice(-Math.min(2, parsed.tokens.length));
-  const broadWhere = `housenumber='${parsed.houseNumber}' AND UPPER(address) LIKE '%${suburbTokens.join("%")}%'`;
-  const candidates = await queryPropertyLayers(broadWhere);
-  if (candidates.length === 0) return null;
-
-  let best: ArcGisFeature | null = null;
-  let bestScore = 0;
-  for (const candidate of candidates) {
-    const address = candidate.attributes.address as string | undefined;
-    if (!address) continue;
-    const score = addressSimilarity(parsed.tokens, address);
-    if (score > bestScore) {
-      bestScore = score;
-      best = candidate;
-    }
-  }
-  if (bestScore < FUZZY_MATCH_THRESHOLD || !best) return null;
-  return { feature: best, fuzzy: true, matchedAddress: (best.attributes.address as string | undefined) ?? null };
+  if (exact.length === 0) return null;
+  return { feature: exact[0] };
 }
 
 async function resolvePointForLot(lotDp: string | null): Promise<{ x: number; y: number } | null> {
@@ -224,8 +202,8 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
     if (!parsed) return unresolvedGeocode("could not parse address into house number / street / suburb");
 
     const match = await findPropertyFeature(parsed);
-    if (!match) return unresolvedGeocode("no property match for this address");
-    const { feature: property, fuzzy, matchedAddress } = match;
+    if (!match) return unresolvedGeocode("no exact property match for this address");
+    const { feature: property } = match;
 
     const centroid = polygonCentroid(property);
     if (!centroid) return unresolvedGeocode("property matched but no usable geometry returned");
@@ -274,9 +252,7 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
       lotPolygon,
       registrationStatus: lotDp ? "registered" : "unregistered",
       provenance: {
-        source: fuzzy
-          ? `NSW Spatial Services (Six Maps NSW_Property + NSW_Cadastre) — live ArcGIS REST; fuzzy-matched "${address}" to "${matchedAddress}" (no exact match found)`
-          : "NSW Spatial Services (Six Maps NSW_Property + NSW_Cadastre) — live ArcGIS REST",
+        source: "NSW Spatial Services (Six Maps NSW_Property + NSW_Cadastre) — live ArcGIS REST",
         layerOrEpi: epiName,
         retrievedAt: nowIso(),
       },
