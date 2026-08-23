@@ -1,6 +1,6 @@
 import { SECONDARY_DWELLING_MIN_FRONTAGE_M, SECONDARY_DWELLING_MIN_LOT_SQM } from "@/lib/pipeline/codes-sepp-constants";
 import type { CouncilProfile } from "@/lib/pipeline/council-profiles";
-import { getElectricityDistributor } from "@/lib/pipeline/electricity-distributor";
+import { getElectricityDistributor, getWaterUtility } from "@/lib/pipeline/electricity-distributor";
 import type {
   AccessSummary,
   ApprovalStrategySummary,
@@ -78,12 +78,19 @@ export function buildCouncilControls(
 
 export function buildUtilitiesSummary(siteProfile: SiteProfile): UtilitiesSummary {
   const distributor = getElectricityDistributor(siteProfile.lga);
+  const waterUtility = getWaterUtility(siteProfile.lga);
+
   return {
     electricityDistributor: distributor
-      ? `${distributor} (regional LGA-based estimate — distributor boundaries don't always align with LGA lines; confirm before relying on this).`
+      ? `${distributor.name} (${
+          distributor.byElimination
+            ? "by elimination — this LGA isn't in Ausgrid's or Endeavour Energy's published metro/Hunter footprint, and Essential Energy's own territory is the rest of NSW"
+            : "regional LGA-based estimate, from the distributor's own published network area"
+        } — confirm via the distributor's postcode checker before relying on this).`
       : "Unknown — verify via the relevant distributor's postcode checker (Ausgrid, Endeavour Energy, or Essential Energy).",
-    otherServicesNote:
-      "Water/sewer, stormwater discharge, NBN, and gas availability, plus service relocation requirements, are not computable from any live source — confirm water/sewer via a Section 10.7 planning certificate or the relevant water utility, stormwater/OSD via the council's DCP (see this report's Engineering section for this council's specific stormwater policy where deep-profiled), NBN via nbnco.com.au, gas via the relevant network operator (e.g. Jemena), and commission a Dial Before You Dig (DBYD) enquiry before any excavation.",
+    otherServicesNote: `Water/sewer: ${
+      waterUtility ? `likely ${waterUtility} (regional estimate — confirm via a Section 10.7 planning certificate)` : "confirm via a Section 10.7 planning certificate — this LGA is outside Sydney/Hunter/Central Coast Water's areas, so it likely has its own local council-run water utility, which can't be named without confirming"
+    }. Stormwater/OSD: this council's DCP (see this report's Engineering section for the specific policy where deep-profiled). NBN: check availability at nbnco.com.au. Gas: contact the relevant network operator (e.g. Jemena in Sydney). Before any excavation: commission a Dial Before You Dig (DBYD) enquiry.`,
   };
 }
 

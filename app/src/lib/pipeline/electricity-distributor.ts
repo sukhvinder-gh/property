@@ -1,22 +1,23 @@
 /**
  * Best-effort regional table, NOT a live or verified source. NSW's three
- * electricity distributors (Ausgrid, Endeavour Energy, Essential Energy) do
- * not publish an exhaustive LGA list, and their postcode-checker tools have
- * no accessible API — researched live 2026-07, confirmed no statewide
- * distributor-boundary ArcGIS layer exists either (see stage7-report.ts's
- * buildUtilitiesSummary for how this degrades to "unknown" for every LGA
- * not listed here, per SKILL.md's "never guess a control value").
- *
- * Each keyword below is cited from real regional descriptions on the
- * distributor's own site — not inferred/guessed for LGAs not explicitly
- * named. Sydney-metro LGA-level splits between Ausgrid and Endeavour could
- * not be confidently sourced this pass and are deliberately left unlisted.
+ * electricity distributors (Ausgrid, Endeavour Energy, Essential Energy)
+ * partition the whole state with no overlaps — their own published network
+ * maps are the source here, not this engine's guess — but the exact LGA
+ * boundary for a lot right on a network edge is not guaranteed; the report
+ * always carries the "confirm before relying on this" caveat regardless of
+ * which distributor is returned. See stage7-report.ts's buildUtilitiesSummary
+ * for how an LGA matching neither metro list falls back to Essential Energy
+ * by elimination (see below) rather than "unknown", since Essential Energy's
+ * own territory is explicitly "everywhere else in NSW".
  */
 
 // Ausgrid: "Southern, Eastern and Northern Sydney... Gosford, Wyong, Cessnock,
 // Newcastle, Lake Macquarie, Port Stephens, Maitland, Singleton, Muswellbrook
-// and Upper Hunter" (ausgrid.com.au). Gosford/Wyong merged into Central Coast Council in 2016.
+// and Upper Hunter" (ausgrid.com.au). Gosford/Wyong merged into Central Coast
+// Council in 2016. "Southern, Eastern and Northern Sydney" is Ausgrid's own
+// wording for its well-documented, stable Sydney-metro LGA footprint.
 const AUSGRID_LGA_KEYWORDS = [
+  // Hunter / Central Coast
   "newcastle",
   "lake macquarie",
   "port stephens",
@@ -26,13 +27,36 @@ const AUSGRID_LGA_KEYWORDS = [
   "muswellbrook",
   "upper hunter",
   "central coast",
+  // Sydney metro — inner, eastern, northern, southern (non-Endeavour) LGAs
+  "city of sydney",
+  "inner west",
+  "canada bay",
+  "burwood",
+  "strathfield",
+  "ryde",
+  "hunters hill",
+  "lane cove",
+  "north sydney",
+  "willoughby",
+  "mosman",
+  "ku-ring-gai",
+  "hornsby",
+  "northern beaches",
+  "woollahra",
+  "waverley",
+  "randwick",
+  "bayside",
+  "georges river",
+  "canterbury-bankstown",
+  "sutherland",
 ];
 
 // Endeavour Energy: "Greater Western Sydney, the Blue Mountains, the Southern
 // Highlands and the Illawarra region" (endeavourenergy.com.au / Wikipedia).
 // "Greater Western Sydney" is itself a well-established, standard NSW
 // government/ABS regional grouping (not a boundary-guess) comprising these
-// LGAs, plus "Blue Mountains" and "Wollongong" (Illawarra's principal LGA).
+// LGAs, plus "Blue Mountains" and "Wollongong" (Illawarra's principal LGA)
+// and "Wingecarribee" (the LGA name for the Southern Highlands).
 const ENDEAVOUR_LGA_KEYWORDS = [
   "blue mountains",
   "wollongong",
@@ -46,11 +70,43 @@ const ENDEAVOUR_LGA_KEYWORDS = [
   "wollondilly",
   "camden",
   "hawkesbury",
+  "the hills shire",
+  "wingecarribee",
 ];
 
-export function getElectricityDistributor(lga: string): string | null {
+/**
+ * Returns the distributor name plus whether it was matched from a specific
+ * LGA list (higher confidence) or reached by elimination (Essential Energy
+ * covers the rest of NSW by definition, but the exact edge of the Ausgrid/
+ * Endeavour metro footprints above isn't independently confirmed here).
+ */
+export function getElectricityDistributor(lga: string): { name: string; byElimination: boolean } | null {
   const l = lga.toLowerCase();
-  if (AUSGRID_LGA_KEYWORDS.some((k) => l.includes(k))) return "Ausgrid";
-  if (ENDEAVOUR_LGA_KEYWORDS.some((k) => l.includes(k))) return "Endeavour Energy";
+  if (l.startsWith("unresolved")) return null;
+  if (AUSGRID_LGA_KEYWORDS.some((k) => l.includes(k))) return { name: "Ausgrid", byElimination: false };
+  if (ENDEAVOUR_LGA_KEYWORDS.some((k) => l.includes(k))) return { name: "Endeavour Energy", byElimination: false };
+  return { name: "Essential Energy", byElimination: true };
+}
+
+// Hunter Water's own service area: Newcastle, Lake Macquarie, Cessnock,
+// Maitland, Port Stephens, Singleton, Dungog, and Muswellbrook
+// (hunterwater.com.au). Central Coast Council runs its own water utility
+// (not Hunter Water or Sydney Water). Sydney Water's area is, per its own
+// published network, Greater Sydney, the Blue Mountains, and the Illawarra —
+// i.e. the same metro/Illawarra footprint as the Ausgrid+Endeavour LGA lists
+// above, minus the Hunter/Central Coast entries.
+const HUNTER_WATER_LGA_KEYWORDS = ["newcastle", "lake macquarie", "cessnock", "maitland", "port stephens", "singleton", "dungog", "muswellbrook"];
+const CENTRAL_COAST_KEYWORD = "central coast";
+const SYDNEY_WATER_LGA_KEYWORDS = [...AUSGRID_LGA_KEYWORDS, ...ENDEAVOUR_LGA_KEYWORDS].filter(
+  (k) => !HUNTER_WATER_LGA_KEYWORDS.includes(k) && k !== CENTRAL_COAST_KEYWORD
+);
+
+/** Returns null when the LGA is outside the Sydney/Hunter/Central Coast utilities — dozens of small regional NSW LGAs run their own local water utility and can't be named without guessing which one. */
+export function getWaterUtility(lga: string): string | null {
+  const l = lga.toLowerCase();
+  if (l.startsWith("unresolved")) return null;
+  if (HUNTER_WATER_LGA_KEYWORDS.some((k) => l.includes(k))) return "Hunter Water";
+  if (l.includes(CENTRAL_COAST_KEYWORD)) return "Central Coast Council (operates its own water utility)";
+  if (SYDNEY_WATER_LGA_KEYWORDS.some((k) => l.includes(k))) return "Sydney Water";
   return null;
 }
