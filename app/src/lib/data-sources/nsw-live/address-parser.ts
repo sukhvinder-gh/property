@@ -18,6 +18,20 @@ function sanitize(s: string): string {
 }
 
 /**
+ * Same injection-safety as sanitize(), but keeps hyphens — NSW_Property
+ * stores consolidated/amalgamated lots (e.g. "8-12 Poole Road Kellyville",
+ * verified live) with a literal hyphenated housenumber field; stripping the
+ * hyphen turns "8-12" into "8 12", which never matches.
+ */
+function sanitizeHouseNumber(s: string): string {
+  return s
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
  * Best-effort parser for "NUMBER STREET[, ]SUBURB [NSW] [POSTCODE]" style
  * addresses against the NSW_Property address field (verified live: `address`
  * is a combined "STREET SUBURB" string). Comma is optional and not load-
@@ -37,7 +51,9 @@ export function parseAddress(address: string): ParsedAddress | null {
     .trim();
   if (!stripped) return null;
 
-  const houseMatch = stripped.match(/^(\d+[A-Za-z]?)\s+(.+)$/);
+  // Allows a hyphenated range for consolidated/amalgamated lots (e.g. "8-12",
+  // "84-86") in addition to a plain number or number+letter (e.g. "7A").
+  const houseMatch = stripped.match(/^(\d+[A-Za-z]?(?:-\d+[A-Za-z]?)?)\s+(.+)$/);
   if (!houseMatch) return null;
 
   const [, houseNumber, rest] = houseMatch;
@@ -46,5 +62,5 @@ export function parseAddress(address: string): ParsedAddress | null {
     .filter((t) => t.length > 0);
   if (tokens.length < 2) return null;
 
-  return { houseNumber: sanitize(houseNumber), tokens };
+  return { houseNumber: sanitizeHouseNumber(houseNumber), tokens };
 }
