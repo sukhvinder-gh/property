@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ReportView } from "@/components/ReportView";
 import { ChatPanel } from "@/components/ChatPanel";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
@@ -20,6 +20,18 @@ export default function Home() {
   // checked without re-running the whole address assessment.
   const assessedAddress = useRef<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  // Usage logging: a random id per browser tab (groups one visit's searches),
+  // and whether the current address text came from an autocomplete pick.
+  const sessionId = useRef<string>("");
+  const pickedAddress = useRef<string | null>(null);
+  useEffect(() => {
+    try {
+      sessionId.current = sessionStorage.getItem("pw-session") ?? crypto.randomUUID();
+      sessionStorage.setItem("pw-session", sessionId.current);
+    } catch {
+      sessionId.current = crypto.randomUUID();
+    }
+  }, []);
 
   async function run() {
     if (!address.trim()) return;
@@ -34,7 +46,11 @@ export default function Home() {
         const res = await fetch("/api/assess", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ address }),
+          body: JSON.stringify({
+            address,
+            sessionId: sessionId.current || undefined,
+            source: pickedAddress.current === address ? "autocomplete" : "typed",
+          }),
         });
         if (!res.ok) throw new Error(`Assessment failed (${res.status})`);
         current = (await res.json()).record as AssessmentRecord;
@@ -50,7 +66,7 @@ export default function Home() {
     if (designFile) {
       setStep("design");
       try {
-        setDesignResult(await checkDesignFile(designFile, current));
+        setDesignResult(await checkDesignFile(designFile, current, sessionId.current || undefined));
       } catch (e) {
         setDesignError(e instanceof Error ? e.message : "Design check failed");
       }
@@ -75,6 +91,7 @@ export default function Home() {
           placeholder="e.g. 12 Sample St, Marsden Park NSW"
           value={address}
           onChange={setAddress}
+          onSelect={(picked) => (pickedAddress.current = picked)}
           onSubmit={run}
         />
         <button
@@ -120,6 +137,10 @@ export default function Home() {
           <span className="text-xs text-neutral-500">PDF or image — floor plan, elevations, and ideally a site plan</span>
         )}
       </div>
+      <p className="mt-1 text-xs text-neutral-500">
+        Searches and uploaded plans are saved so we can improve the service. Don&apos;t upload plans you aren&apos;t
+        happy for us to keep.
+      </p>
       {step === "design" && <p className="mt-2 text-xs text-neutral-500">Reading the drawings can take up to a minute.</p>}
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
 

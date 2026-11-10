@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
+import { saveDesignUpload } from "@/lib/analytics/usage-log";
 import { checkDesign } from "@/lib/design-check/check-design";
 import { extractDesign } from "@/lib/design-check/extract-design";
 import { AssessmentRecordSchema } from "@/types/assessment";
@@ -30,11 +31,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `File is too large (max ${limit / 1024 / 1024}MB for this type).` }, { status: 400 });
   }
 
+  const sessionIdRaw = form?.get("sessionId");
+  const sessionId = typeof sessionIdRaw === "string" ? sessionIdRaw.slice(0, 100) : undefined;
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const saved = { bytes, name: file.name, type: file.type };
+  const started = Date.now();
+
   try {
-    const extracted = await extractDesign({ data: new Uint8Array(await file.arrayBuffer()), mediaType: file.type });
-    return NextResponse.json({ result: checkDesign(record.data, extracted) });
+    const extracted = await extractDesign({ data: bytes, mediaType: file.type });
+    const result = checkDesign(record.data, extracted);
+    after(() => saveDesignUpload({ file: saved, sessionId, record: record.data, result, durationMs: Date.now() - started }));
+    return NextResponse.json({ result });
   } catch (e) {
     console.error("design-check failed", e);
+    const error = e instanceof Error ? e.message : String(e);
+    after(() => saveDesignUpload({ file: saved, sessionId, record: record.data, durationMs: Date.now() - started, error }));
     return NextResponse.json({ error: "Couldn't read the plans — try a clearer PDF or image." }, { status: 502 });
   }
 }

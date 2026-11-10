@@ -16,8 +16,8 @@ export function ApprovalChecklist({ record, design }: { record: AssessmentRecord
   const groups = [...new Set(rows.map((r) => r.group))];
 
   return (
-    <div className="mt-4">
-      <h4 className="font-semibold">Approval checklist — everything checked</h4>
+    <div>
+      <h3 className="font-semibold">Approval checklist — everything checked</h3>
       <p className="text-xs text-neutral-600">
         {count("pass")} met · {count("fail")} not met · {count("warn")} need an extra step · {count("unknown")} to verify ·{" "}
         {count("points")} score factors short of full marks

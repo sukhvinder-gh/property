@@ -11,12 +11,15 @@ export function AddressAutocomplete({
   value,
   onChange,
   onSubmit,
+  onSelect,
   placeholder,
   className,
 }: {
   value: string;
   onChange: (value: string) => void;
   onSubmit?: () => void;
+  /** Called when a suggestion is picked (after onChange), as opposed to typed text. */
+  onSelect?: (value: string) => void;
   placeholder?: string;
   className?: string;
 }) {
@@ -71,6 +74,7 @@ export function AddressAutocomplete({
 
   function select(s: Suggestion) {
     onChange(s.text);
+    onSelect?.(s.text);
     setSuggestions([]);
     setOpen(false);
     sessionTokenRef.current = crypto.randomUUID(); // new billing session after a completed pick

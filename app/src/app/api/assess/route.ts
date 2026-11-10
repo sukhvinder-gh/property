@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
+import { logSearch } from "@/lib/analytics/usage-log";
 import { getDataSourceAdapter } from "@/lib/data-sources/get-adapter";
 import { runAssessment } from "@/lib/pipeline/run-assessment";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
@@ -17,12 +18,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { address, targetDwelling } = parsed.data;
+  const { address, targetDwelling, sessionId, source } = parsed.data;
 
-  const record = await runAssessment(adapter, {
-    address,
-    targetDwelling: targetDwelling ? { description: targetDwelling, footprintSqm: 0 } : undefined,
-  });
+  const started = Date.now();
+  let record;
+  try {
+    record = await runAssessment(adapter, {
+      address,
+      targetDwelling: targetDwelling ? { description: targetDwelling, footprintSqm: 0 } : undefined,
+    });
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    after(() => logSearch({ query: address, sessionId, source, durationMs: Date.now() - started, error }));
+    console.error("assessment failed", e);
+    return NextResponse.json({ error: "Assessment failed — try again shortly." }, { status: 500 });
+  }
+  const done = record;
+  after(() => logSearch({ query: address, sessionId, source, record: done, durationMs: Date.now() - started }));
 
   const supabase = getSupabaseServerClient();
   if (supabase) {

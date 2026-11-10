@@ -13,10 +13,11 @@ const VERDICT_STYLE: Record<DesignVerdict, { label: string; className: string }>
 const STATUS_ICON: Record<DesignCheckItem["status"], string> = { pass: "✅", fail: "❌", unknown: "❔" };
 
 /** Sends the plans plus the address's assessment to /api/design-check. */
-export async function checkDesignFile(file: File, record: AssessmentRecord): Promise<DesignCheckResult> {
+export async function checkDesignFile(file: File, record: AssessmentRecord, sessionId?: string): Promise<DesignCheckResult> {
   const body = new FormData();
   body.append("file", file);
   body.append("record", JSON.stringify(record));
+  if (sessionId) body.append("sessionId", sessionId);
   const res = await fetch("/api/design-check", { method: "POST", body });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error ?? `Design check failed (${res.status})`);

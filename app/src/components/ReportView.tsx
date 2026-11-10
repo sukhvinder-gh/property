@@ -150,6 +150,15 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
         )}
       </header>
 
+      <section className="rounded border px-3 py-2">
+        <ApprovalChecklist record={record} design={designResult ?? null} />
+        <p className="mt-2 text-xs text-neutral-600">
+          Score {score.score ?? `${score.bandHigh}–${score.bandLow}`}
+          {score.score !== null ? "/100" : ""} ({score.bandLow}) — see the score breakdown in the Feasibility summary at
+          the end of the report.
+        </p>
+      </section>
+
       <section>
         <h3 className="font-semibold">Site profile</h3>
         <ul className="mt-1 list-disc pl-5">
@@ -511,7 +520,6 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
           <span className="font-medium">Recommendation:</span> {recommendationLabel(record.feasibilitySummary.recommendation)}
         </p>
         <p className="mt-1 text-neutral-700">{record.feasibilitySummary.reasoning}</p>
-        <ApprovalChecklist record={record} design={designResult ?? null} />
         <ScoreBreakdown score={score} />
       </section>
 

@@ -319,5 +319,8 @@ export type AssessmentRecord = z.infer<typeof AssessmentRecordSchema>;
 export const AssessRequestSchema = z.object({
   address: z.string().min(3),
   targetDwelling: z.string().optional(),
+  // Usage logging only: per-tab session id, and whether the address was picked from autocomplete.
+  sessionId: z.string().max(100).optional(),
+  source: z.enum(["autocomplete", "typed"]).optional(),
 });
 export type AssessRequest = z.infer<typeof AssessRequestSchema>;
