@@ -12,11 +12,15 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/*
+ * Light theme only for now: the components use fixed light-palette colours
+ * (text-neutral-700, bg-amber-50, ...) that become unreadable on a dark
+ * background. A proper dark mode needs dark: variants across the components.
+ */
+:root {
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #171717;
 }
 
 body {

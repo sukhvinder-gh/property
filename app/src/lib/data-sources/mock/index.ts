@@ -244,6 +244,8 @@ export class MockDataSourceAdapter implements DataSourceAdapter {
     if (!f) {
       return {
         lotDp: null,
+        propId: null,
+        councilName: null,
         lga: UNRESOLVED_LGA,
         epiName: "Unknown — verify via NSW Planning Portal",
         epiAmendmentDate: null,
@@ -261,6 +263,8 @@ export class MockDataSourceAdapter implements DataSourceAdapter {
     }
     return {
       lotDp: f.registrationStatus === "unregistered" ? null : `Lot 42/DP${Math.floor(1000000 + Math.random() * 8999999)}`,
+      propId: null,
+      councilName: null,
       lga: f.lga,
       epiName: f.epiName,
       epiAmendmentDate: f.epiAmendmentDate,

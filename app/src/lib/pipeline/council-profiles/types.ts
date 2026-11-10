@@ -8,6 +8,13 @@ export interface CouncilControlNote {
 export interface CouncilProfile {
   /** Substring match against the resolved LGA name (lowercased). */
   lgaKeyword: string;
+  /**
+   * The council's principal LEP exactly as the ePlanning layers return it in
+   * EPI_NAME. permittedUsesByZone and minLotSizeByUseAndZone are clauses of
+   * this LEP, so they only apply to lots whose live EPI matches — land in the
+   * same LGA can instead be zoned under a SEPP (e.g. growth-centre precincts).
+   */
+  lepName: string;
   /** Cited DCP name, part/section, and currency date — surfaced in report provenance. */
   instrumentName: string;
   instrumentUrl: string;

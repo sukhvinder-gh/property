@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import type { DataSourceAdapter } from "@/lib/data-sources/types";
-import { getCouncilProfile } from "@/lib/pipeline/council-profiles";
+import { getCouncilProfileForSite } from "@/lib/pipeline/council-profiles";
 import { runStage1SiteIdentification } from "@/lib/pipeline/stage1-site-identification";
 import { runStage2PlanningControls } from "@/lib/pipeline/stage2-planning-controls";
 import { runStage3Constraints } from "@/lib/pipeline/stage3-constraints";
@@ -39,12 +39,12 @@ export interface RunAssessmentInput {
  */
 export async function runAssessment(adapter: DataSourceAdapter, input: RunAssessmentInput): Promise<AssessmentRecord> {
   const siteProfile = await runStage1SiteIdentification(adapter, input.address);
-  const councilProfile = getCouncilProfile(siteProfile.lga);
+  const councilProfile = getCouncilProfileForSite(siteProfile.lga, siteProfile.epiName);
   const planningControls = await runStage2PlanningControls(adapter, siteProfile);
   const constraints = await runStage3Constraints(adapter, siteProfile);
   const buildableEnvelope = runStage4BuildableEnvelope(siteProfile, constraints, input.targetDwelling, councilProfile);
   const pathway = runStage5Pathway(siteProfile, planningControls, constraints);
-  const daStats = await adapter.daStats(siteProfile.lga, pathway.pathway === "cdc" ? "CDC" : "DA");
+  const daStats = await adapter.daStats(siteProfile.councilName ?? siteProfile.lga, pathway.pathway === "cdc" ? "CDC" : "DA");
   const score = runStage6Scoring(siteProfile, planningControls, constraints, daStats, buildableEnvelope, councilProfile);
 
   const costSignals = buildCostSignals(constraints, siteProfile);
@@ -52,7 +52,7 @@ export async function runAssessment(adapter: DataSourceAdapter, input: RunAssess
   const risksAndUnknowns = buildRisksAndUnknowns(siteProfile, buildableEnvelope, constraints);
   const riskRegister = buildRiskRegister(siteProfile, planningControls, constraints);
   const nextSteps = buildNextSteps(pathway, siteProfile);
-  const developmentPotential = buildDevelopmentPotential(siteProfile, planningControls, councilProfile);
+  const developmentPotential = buildDevelopmentPotential(siteProfile, planningControls, constraints, councilProfile);
   const councilControls = buildCouncilControls(siteProfile, planningControls, councilProfile);
   const utilities = buildUtilitiesSummary(siteProfile);
   const access = buildAccessSummary(siteProfile);

@@ -6,6 +6,7 @@ import type { CouncilProfile } from "@/lib/pipeline/council-profiles/types";
  */
 export const hillsShireProfile: CouncilProfile = {
   lgaKeyword: "hills shire",
+  lepName: "The Hills Local Environmental Plan 2019",
   instrumentName: "The Hills Development Control Plan 2012, Part B Section 2 — Residential (§2.14, in force 6 May 2022)",
   instrumentUrl: "https://www.thehills.nsw.gov.au/files/assets/public/v/1/cms-docs/building/dcp/the-hills-dcp-part-b-section-2-residential.pdf",
   setbacks: {

@@ -1,6 +1,11 @@
 import dynamic from "next/dynamic";
 import type { AssessmentRecord } from "@/types/assessment";
+import type { DesignCheckResult } from "@/lib/design-check/schema";
+import { ApprovalChecklist } from "@/components/ApprovalChecklist";
 import { FinancialFeasibilityCalculator } from "@/components/FinancialFeasibilityCalculator";
+
+// Hidden for now; flip to true to bring the calculator back.
+const SHOW_FINANCIAL_CALCULATOR = false;
 
 const MassingView = dynamic(() => import("@/components/MassingView").then((m) => m.MassingView), {
   ssr: false,
@@ -32,7 +37,75 @@ function recommendationLabel(recommendation: string) {
   }
 }
 
-export function ReportView({ record }: { record: AssessmentRecord }) {
+const fmtPts = (n: number) => String(Math.round(n * 10) / 10);
+
+/** Line-by-line breakdown of how the approval-likelihood score is built (stage6-scoring.ts). */
+function ScoreBreakdown({ score }: { score: AssessmentRecord["score"] }) {
+  const total = score.factors.reduce((s, f) => s + f.contribution, 0);
+  const available = score.factors.reduce((s, f) => s + f.weight, 0);
+  const scaled = available > 0 && available < 100;
+  const capped = score.score !== null && score.score < Math.round((total / available) * 100) - 1;
+  return (
+    <div className="mt-4">
+      <h4 className="font-semibold">How the score is calculated</h4>
+      <p className="text-xs text-neutral-600">
+        Each factor has a maximum number of points; the site earns some or all of them. The score is the sum.
+      </p>
+      <div className="mt-2 overflow-x-auto">
+        <table className="w-full border-collapse text-xs">
+          <thead>
+            <tr className="border-b text-left">
+              <th className="py-1 pr-2">Factor</th>
+              <th className="py-1 pr-2 text-right">Max</th>
+              <th className="py-1 pr-2 text-right">Scored</th>
+              <th className="py-1 pr-2 text-right">Lost</th>
+              <th className="py-1 pr-2">Why</th>
+            </tr>
+          </thead>
+          <tbody>
+            {score.factors.map((f) => (
+              <tr key={f.factor} className="border-b align-top">
+                <td className="py-1 pr-2">{f.factor}</td>
+                <td className="py-1 pr-2 text-right">{fmtPts(f.weight)}</td>
+                <td className="py-1 pr-2 text-right font-medium">{fmtPts(f.contribution)}</td>
+                <td className={`py-1 pr-2 text-right ${f.weight - f.contribution > 0 ? "text-red-700" : "text-neutral-400"}`}>
+                  {f.weight - f.contribution > 0 ? `−${fmtPts(f.weight - f.contribution)}` : "0"}
+                </td>
+                <td className="py-1 pr-2 text-neutral-700">{f.note}</td>
+              </tr>
+            ))}
+            <tr className="font-semibold">
+              <td className="py-1 pr-2">Total</td>
+              <td className="py-1 pr-2 text-right">{fmtPts(available)}</td>
+              <td className="py-1 pr-2 text-right">{fmtPts(total)}</td>
+              <td className="py-1 pr-2 text-right text-red-700">−{fmtPts(available - total)}</td>
+              <td className="py-1 pr-2 font-normal text-neutral-700">
+                {score.isBanded
+                  ? `Data-thin council — shown as a band (${score.bandHigh}–${score.bandLow}) rather than a point score.`
+                  : scaled
+                    ? `${fmtPts(total)} of ${fmtPts(available)} assessable points = ${score.score}/100 → ${score.bandLow}.`
+                    : `${score.score}/100 → ${score.bandLow}.`}
+                {capped && " Capped at 10 because the zoning doesn't clearly permit the use."}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      {scaled && (
+        <p className="mt-1 text-xs text-neutral-600">
+          Only {fmtPts(available)} points could be assessed here — the council approval-rate factor is reduced or
+          left out when live approval data is thin or unavailable — so the score is scaled to 100 from those points.
+          Missing data doesn&apos;t count against the site.
+        </p>
+      )}
+      <p className="mt-1 text-xs text-neutral-600">
+        Bands: Strong 75–100 · Viable 50–74 · Marginal 30–49 · Unlikely below 30.
+      </p>
+    </div>
+  );
+}
+
+export function ReportView({ record, designResult }: { record: AssessmentRecord; designResult?: DesignCheckResult | null }) {
   const { siteProfile, planningControls, constraints, buildableEnvelope, pathway, score } = record;
   // A wholly unresolved address has no lot/DP at all — distinct from an
   // LGA name specifically missing from one layer's attributes (e.g. some
@@ -48,8 +121,9 @@ export function ReportView({ record }: { record: AssessmentRecord }) {
         flood, acid sulfate soils, aircraft noise (ANEF), mine subsidence, Coastal Management SEPP areas, groundwater
         vulnerability, and salinity come from live NSW Spatial Services / ePlanning ArcGIS layers. Slope is a live
         estimate from a 5m-resolution elevation model, and soil type is a regional soil-landscape classification —
-        neither is a substitute for a survey or geotechnical report. Contamination, sewer easements, and DA
-        approval-rate history have no confirmed free live source yet and are honestly reported as unknown rather than
+        neither is a substitute for a survey or geotechnical report. Council approval history comes live from the
+        Planning Portal&apos;s CDC and DA feeds (the DA feed doesn&apos;t publish approve/refuse outcomes). Contamination
+        and sewer easements have no confirmed free live source yet and are honestly reported as unknown rather than
         guessed — see Risks &amp; unknowns below.
       </div>
       {isUnresolvedAddress && (
@@ -111,14 +185,43 @@ export function ReportView({ record }: { record: AssessmentRecord }) {
           <li>Height of buildings: {planningControls.heightOfBuildingM ?? "verify via Planning Portal"} m</li>
           <li>Heritage item: {planningControls.heritageItem ? "yes" : "no"}</li>
           <li>Heritage conservation area: {planningControls.heritageConservationArea ? "yes" : "no"}</li>
+          {planningControls.heritageListing && <li>Heritage listing: {planningControls.heritageListing}</li>}
+          {planningControls.precinct && <li>Precinct: {planningControls.precinct}</li>}
+          {planningControls.greenfieldHousingCodeArea && (
+            <li>Greenfield Housing Code area (Codes SEPP Part 3C) — CDCs here use the Greenfield code&apos;s standards</li>
+          )}
+          {(planningControls.localProvisions ?? []).map((p, i) => (
+            <li key={i}>
+              {p.name}: {p.value}
+              {p.clause ? ` (${p.clause})` : ""}
+            </li>
+          ))}
         </ul>
+        {planningControls.legislationUrl && (
+          <p className="mt-1 text-xs text-neutral-600">
+            Governing instrument:{" "}
+            <a href={planningControls.legislationUrl} target="_blank" rel="noreferrer" className="underline">
+              {siteProfile.epiName}
+            </a>{" "}
+            — its Land Use Table is the legal word on what&apos;s permitted in this zone.
+          </p>
+        )}
       </section>
 
       <section>
         <h3 className="font-semibold">Council controls</h3>
         <ul className="mt-1 list-disc pl-5">
           <li>LEP: {record.councilControls.lepName}</li>
-          <li>DCP: {record.councilControls.dcpName ?? "Not deep-profiled in this engine — locate via the council website"}</li>
+          <li>
+            DCP:{" "}
+            {planningControls.dcp?.url ? (
+              <a href={planningControls.dcp.url} target="_blank" rel="noreferrer" className="underline">
+                {planningControls.dcp.name}
+              </a>
+            ) : (
+              (record.councilControls.dcpName ?? "Not found — locate via the council website")
+            )}
+          </li>
           <li>Heritage: {record.councilControls.heritage}</li>
           <li>Character &amp; streetscape: {record.councilControls.characterAndStreetscape}</li>
           <li>Tree preservation: {record.councilControls.treePreservation}</li>
@@ -303,7 +406,7 @@ export function ReportView({ record }: { record: AssessmentRecord }) {
         </ul>
       </section>
 
-      <FinancialFeasibilityCalculator />
+      {SHOW_FINANCIAL_CALCULATOR && <FinancialFeasibilityCalculator />}
 
       <section>
         <h3 className="font-semibold">Approval pathway & timeline</h3>
@@ -408,6 +511,8 @@ export function ReportView({ record }: { record: AssessmentRecord }) {
           <span className="font-medium">Recommendation:</span> {recommendationLabel(record.feasibilitySummary.recommendation)}
         </p>
         <p className="mt-1 text-neutral-700">{record.feasibilitySummary.reasoning}</p>
+        <ApprovalChecklist record={record} design={designResult ?? null} />
+        <ScoreBreakdown score={score} />
       </section>
 
       <p className="border-t pt-3 text-xs text-neutral-500">

@@ -33,6 +33,8 @@ export async function runStage1SiteIdentification(
   return {
     address,
     lotDp: geo.lotDp,
+    propId: geo.propId,
+    councilName: geo.councilName,
     lga: geo.lga,
     epiName: geo.epiName,
     epiAmendmentDate: geo.epiAmendmentDate,

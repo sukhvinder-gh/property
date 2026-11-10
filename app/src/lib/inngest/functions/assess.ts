@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { inngest, type AssessmentRequestedEvent } from "@/lib/inngest/client";
 import { getDataSourceAdapter } from "@/lib/data-sources/get-adapter";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { getCouncilProfile } from "@/lib/pipeline/council-profiles";
+import { getCouncilProfileForSite } from "@/lib/pipeline/council-profiles";
 import { runStage1SiteIdentification } from "@/lib/pipeline/stage1-site-identification";
 import { runStage2PlanningControls } from "@/lib/pipeline/stage2-planning-controls";
 import { runStage3Constraints } from "@/lib/pipeline/stage3-constraints";
@@ -52,7 +52,7 @@ export const assessProperty = inngest.createFunction(
         runStage1SiteIdentification(adapter, address)
       );
 
-      const councilProfile = getCouncilProfile(siteProfile.lga);
+      const councilProfile = getCouncilProfileForSite(siteProfile.lga, siteProfile.epiName);
 
       const planningControls = await step.run("stage-2-planning-controls", () =>
         runStage2PlanningControls(adapter, siteProfile)
@@ -71,7 +71,7 @@ export const assessProperty = inngest.createFunction(
       );
 
       const daStats = await step.run("stage-5b-da-stats", () =>
-        adapter.daStats(siteProfile.lga, pathway.pathway === "cdc" ? "CDC" : "DA")
+        adapter.daStats(siteProfile.councilName ?? siteProfile.lga, pathway.pathway === "cdc" ? "CDC" : "DA")
       );
 
       const score = await step.run("stage-6-scoring", () =>
@@ -84,7 +84,7 @@ export const assessProperty = inngest.createFunction(
         const risksAndUnknowns = buildRisksAndUnknowns(siteProfile, buildableEnvelope, constraints);
         const riskRegister = buildRiskRegister(siteProfile, planningControls, constraints);
         const nextSteps = buildNextSteps(pathway, siteProfile);
-        const developmentPotential = buildDevelopmentPotential(siteProfile, planningControls, councilProfile);
+        const developmentPotential = buildDevelopmentPotential(siteProfile, planningControls, constraints, councilProfile);
         const councilControls = buildCouncilControls(siteProfile, planningControls, councilProfile);
         const utilities = buildUtilitiesSummary(siteProfile);
         const access = buildAccessSummary(siteProfile);

@@ -1,36 +1,66 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ReportView } from "@/components/ReportView";
 import { ChatPanel } from "@/components/ChatPanel";
 import { AddressAutocomplete } from "@/components/AddressAutocomplete";
+import { DesignCheckResults, checkDesignFile } from "@/components/DesignCheckPanel";
+import type { DesignCheckResult } from "@/lib/design-check/schema";
 import type { AssessmentRecord } from "@/types/assessment";
 
 export default function Home() {
   const [address, setAddress] = useState("");
+  const [designFile, setDesignFile] = useState<File | null>(null);
   const [record, setRecord] = useState<AssessmentRecord | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [designResult, setDesignResult] = useState<DesignCheckResult | null>(null);
+  const [step, setStep] = useState<"idle" | "address" | "design">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [designError, setDesignError] = useState<string | null>(null);
+  // Address the current `record` was assessed for — lets a new design be
+  // checked without re-running the whole address assessment.
+  const assessedAddress = useRef<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
 
-  async function runAssessment() {
+  async function run() {
     if (!address.trim()) return;
-    setLoading(true);
     setError(null);
-    try {
-      const res = await fetch("/api/assess", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address }),
-      });
-      if (!res.ok) throw new Error(`Assessment failed (${res.status})`);
-      const data = await res.json();
-      setRecord(data.record);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Assessment failed");
-    } finally {
-      setLoading(false);
+    setDesignError(null);
+    setDesignResult(null);
+
+    let current = record;
+    if (!current || assessedAddress.current !== address) {
+      setStep("address");
+      try {
+        const res = await fetch("/api/assess", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ address }),
+        });
+        if (!res.ok) throw new Error(`Assessment failed (${res.status})`);
+        current = (await res.json()).record as AssessmentRecord;
+        setRecord(current);
+        assessedAddress.current = address;
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Assessment failed");
+        setStep("idle");
+        return;
+      }
     }
+
+    if (designFile) {
+      setStep("design");
+      try {
+        setDesignResult(await checkDesignFile(designFile, current));
+      } catch (e) {
+        setDesignError(e instanceof Error ? e.message : "Design check failed");
+      }
+    }
+    setStep("idle");
   }
+
+  const busy = step !== "idle";
+  const buttonLabel =
+    step === "address" ? "Checking address…" : step === "design" ? "Reading plans…" : designFile ? "Check address & design" : "Run assessment";
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
@@ -45,24 +75,66 @@ export default function Home() {
           placeholder="e.g. 12 Sample St, Marsden Park NSW"
           value={address}
           onChange={setAddress}
-          onSubmit={runAssessment}
+          onSubmit={run}
         />
         <button
-          onClick={runAssessment}
-          disabled={loading}
-          className="rounded bg-neutral-800 px-4 py-2 text-sm text-white disabled:opacity-50"
+          onClick={run}
+          disabled={busy || !address.trim()}
+          className="shrink-0 rounded bg-neutral-800 px-4 py-2 text-sm text-white disabled:opacity-50"
         >
-          {loading ? "Assessing…" : "Run assessment"}
+          {buttonLabel}
         </button>
       </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-neutral-500">House design (optional):</span>
+        <input
+          ref={fileInput}
+          type="file"
+          accept="application/pdf,image/png,image/jpeg,image/webp"
+          onChange={(e) => setDesignFile(e.target.files?.[0] ?? null)}
+          className="hidden"
+        />
+        <button
+          onClick={() => fileInput.current?.click()}
+          disabled={busy}
+          className="rounded border px-3 py-1.5 text-sm disabled:opacity-50"
+        >
+          {designFile ? "Change file" : "Upload plans"}
+        </button>
+        {designFile ? (
+          <>
+            <span className="truncate">{designFile.name}</span>
+            <button
+              onClick={() => {
+                setDesignFile(null);
+                if (fileInput.current) fileInput.current.value = "";
+              }}
+              disabled={busy}
+              className="text-xs text-neutral-500 underline"
+            >
+              remove
+            </button>
+          </>
+        ) : (
+          <span className="text-xs text-neutral-500">PDF or image — floor plan, elevations, and ideally a site plan</span>
+        )}
+      </div>
+      {step === "design" && <p className="mt-2 text-xs text-neutral-500">Reading the drawings can take up to a minute.</p>}
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
 
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
         <div className="rounded border p-4">
           {record ? (
-            <ReportView record={record} />
+            <div className="space-y-6">
+              {designError && <p className="text-sm text-red-600">Design check: {designError}</p>}
+              {designResult && <DesignCheckResults result={designResult} />}
+              <ReportView record={record} designResult={designResult} />
+            </div>
           ) : (
-            <p className="text-sm text-neutral-500">Enter an address above and run an assessment to see the report.</p>
+            <p className="text-sm text-neutral-500">
+              Enter an address above (and optionally upload your house plans), then run the assessment to see the report.
+            </p>
           )}
         </div>
         <div className="h-[600px]">

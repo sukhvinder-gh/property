@@ -6,7 +6,7 @@ export async function runStage2PlanningControls(
   adapter: DataSourceAdapter,
   siteProfile: SiteProfile
 ): Promise<PlanningControls> {
-  const controls = await adapter.planningControls(siteProfile.lotDp, siteProfile.lga, siteProfile.epiName);
+  const controls = await adapter.planningControls(siteProfile.lotDp, siteProfile.lga, siteProfile.epiName, siteProfile.propId);
   const heritageZone = verifyZoneAlignment(controls.heritageZoneRings, siteProfile);
 
   const provenance = [controls.provenance];
@@ -24,6 +24,13 @@ export async function runStage2PlanningControls(
     heritageConservationArea: controls.heritageConservationArea,
     biodiversityOverlay: controls.biodiversityOverlay,
     heritageZoneRings: heritageZone.rings,
+    heritageListing: controls.heritageListing,
+    legislationUrl: controls.legislationUrl,
+    localProvisions: controls.localProvisions,
+    additionalPermittedUses: controls.additionalPermittedUses,
+    greenfieldHousingCodeArea: controls.greenfieldHousingCodeArea,
+    precinct: controls.precinct,
+    dcp: controls.dcp,
     provenance,
   };
 }

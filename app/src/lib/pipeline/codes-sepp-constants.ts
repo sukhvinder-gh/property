@@ -12,6 +12,8 @@
  */
 export const SECONDARY_DWELLING_MIN_LOT_SQM = 450;
 export const SECONDARY_DWELLING_MIN_FRONTAGE_M = 12;
+/** Max floor area of a CDC secondary dwelling — same verification as above. */
+export const SECONDARY_DWELLING_MAX_FLOOR_SQM = 60;
 
 /**
  * Housing Code (Codes SEPP) default minimums for a NEW dwelling house via

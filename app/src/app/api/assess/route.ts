@@ -4,6 +4,10 @@ import { runAssessment } from "@/lib/pipeline/run-assessment";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { AssessRequestSchema } from "@/types/assessment";
 
+// An assessment is ~15–30s of live NSW lookups, longer when an upstream
+// service is slow; allow headroom so Vercel doesn't cut it off.
+export const maxDuration = 180;
+
 const adapter = getDataSourceAdapter();
 
 export async function POST(req: NextRequest) {

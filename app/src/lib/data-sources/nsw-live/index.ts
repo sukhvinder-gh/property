@@ -24,6 +24,8 @@ import {
   type ArcGisFeature,
 } from "@/lib/data-sources/nsw-live/arcgis";
 import { parseAddress } from "@/lib/data-sources/nsw-live/address-parser";
+import { fetchCouncilName, fetchPropertyLayers, summarisePlanning, type EPlanningPropertyPlanning } from "@/lib/data-sources/nsw-live/eplanning-api";
+import { fetchCouncilApplicationStats } from "@/lib/data-sources/nsw-live/application-stats";
 import { isCouncilProfiled } from "@/lib/pipeline/council-profiles";
 
 /**
@@ -173,9 +175,21 @@ async function resolvePointForLot(lotDp: string | null): Promise<{ x: number; y:
   return polygonCentroid(features[0]);
 }
 
+/** Planning Portal ePlanning summary for a property, or null if the API can't answer (callers fall back to map layers). */
+async function eplanningFor(propId: number | null | undefined): Promise<EPlanningPropertyPlanning | null> {
+  if (!propId) return null;
+  try {
+    return summarisePlanning(await fetchPropertyLayers(propId));
+  } catch {
+    return null;
+  }
+}
+
 function unresolvedGeocode(reason: string): GeocodeResult {
   return {
     lotDp: null,
+    propId: null,
+    councilName: null,
     lga: UNRESOLVED_LGA,
     epiName: "Unknown — verify via NSW Planning Portal",
     epiAmendmentDate: null,
@@ -208,13 +222,16 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
     const centroid = polygonCentroid(property);
     if (!centroid) return unresolvedGeocode("property matched but no usable geometry returned");
 
-    const [cadastreFeatures, zoningFeatures, lgaFeatures] = await Promise.all([
+    const propId = (property.attributes.propid as number | undefined) ?? null;
+    const [cadastreFeatures, zoningFeatures, lgaFeatures, eplanning, councilName] = await Promise.all([
       queryArcGis(CADASTRE_SERVICE, {
         ...pointQuery(centroid, "lotnumber,lotidstring,planlabel"),
         returnGeometry: "true",
       }).catch(() => [] as ArcGisFeature[]),
       queryArcGis(ZONING_LAYER, pointQuery(centroid, "LGA_NAME,EPI_NAME,COMMENCED_DATE")).catch(() => [] as ArcGisFeature[]),
       queryArcGis(LGA_LAYER, pointQuery(centroid, "lganame")).catch(() => [] as ArcGisFeature[]),
+      eplanningFor(propId),
+      propId ? fetchCouncilName(propId).catch(() => null) : Promise.resolve(null),
     ]);
 
     const lotFeature = cadastreFeatures[0];
@@ -229,7 +246,10 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
     const lgaLayerName = (lgaFeatures[0]?.attributes.lganame as string | undefined) || undefined;
     const zoningLgaName = (zf?.attributes.LGA_NAME as string | undefined) || undefined;
     const lga = lgaLayerName ? titleCase(lgaLayerName) : zoningLgaName ? titleCase(zoningLgaName) : UNRESOLVED_LGA;
-    const epiName = (zf?.attributes.EPI_NAME as string | undefined) ?? "Unknown — verify via NSW Planning Portal";
+    // The Planning Portal's own property lookup is the authoritative answer to
+    // "which instrument zones this lot"; the zoning map layer is the fallback.
+    const epiName =
+      eplanning?.instrumentName ?? (zf?.attributes.EPI_NAME as string | undefined) ?? "Unknown — verify via NSW Planning Portal";
     const commencedRaw = zf?.attributes.COMMENCED_DATE as number | undefined;
     const epiAmendmentDate = commencedRaw ? new Date(commencedRaw).toISOString().slice(0, 10) : null;
 
@@ -242,6 +262,8 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
 
     return {
       lotDp,
+      propId,
+      councilName,
       lga,
       epiName,
       epiAmendmentDate,
@@ -443,9 +465,9 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
     };
   }
 
-  async planningControls(lotDp: string | null, lga: string, epiName: string): Promise<PlanningControlsResult> {
-    const point = await resolvePointForLot(lotDp);
-    if (!point) {
+  async planningControls(lotDp: string | null, lga: string, epiName: string, propId?: number | null): Promise<PlanningControlsResult> {
+    const [point, ep] = await Promise.all([resolvePointForLot(lotDp), eplanningFor(propId)]);
+    if (!point && !ep) {
       return {
         zone: "Unknown",
         zoneDescription: "Not resolved — verify via NSW Planning Portal / Section 10.7 certificate",
@@ -460,13 +482,20 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
       };
     }
 
+    // Map layers still supply geometry (heritage rings for the 3D view) and
+    // biodiversity, and stand in for any control the ePlanning API didn't
+    // return. When the API answered, its values win — it's what the Planning
+    // Portal itself shows for this property.
+    const none = Promise.resolve([] as ArcGisFeature[]);
+    const layer = (url: string, fields: string, needed: boolean) =>
+      point && needed ? queryArcGis(url, pointQuery(point, fields)).catch(() => [] as ArcGisFeature[]) : none;
     const [zoningF, fsrF, heightF, heritageF, minLotSizeF, biodiversityF] = await Promise.all([
-      queryArcGis(ZONING_LAYER, pointQuery(point, "SYM_CODE,LAY_CLASS")).catch(() => [] as ArcGisFeature[]),
-      queryArcGis(FSR_LAYER, pointQuery(point, "FSR")).catch(() => [] as ArcGisFeature[]),
-      queryArcGis(HEIGHT_LAYER, pointQuery(point, "MAX_B_H")).catch(() => [] as ArcGisFeature[]),
-      queryArcGis(HERITAGE_LAYER, pointQuery(point, "*")).catch(() => [] as ArcGisFeature[]),
-      queryArcGis(MIN_LOT_SIZE_LAYER, pointQuery(point, "LOT_SIZE,UNITS,LEGIS_REF_CLAUSE")).catch(() => [] as ArcGisFeature[]),
-      queryArcGis(TERRESTRIAL_BIODIVERSITY_LAYER, pointQuery(point, "LAY_CLASS")).catch(() => [] as ArcGisFeature[]),
+      layer(ZONING_LAYER, "SYM_CODE,LAY_CLASS", !ep?.zone),
+      layer(FSR_LAYER, "FSR", !ep),
+      layer(HEIGHT_LAYER, "MAX_B_H", !ep),
+      layer(HERITAGE_LAYER, "*", true),
+      layer(MIN_LOT_SIZE_LAYER, "LOT_SIZE,UNITS,LEGIS_REF_CLAUSE", !ep),
+      layer(TERRESTRIAL_BIODIVERSITY_LAYER, "LAY_CLASS", true),
     ]);
 
     const zf = zoningF[0];
@@ -474,22 +503,40 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
     // LAY_CLASS on the heritage layer distinguishes item vs conservation area
     // (verified live 2026-07, e.g. "Item - General"); a substring check is a
     // reasonable read on an unfamiliar-but-real enum rather than a guess.
-    const heritageClass = (heritageFeature?.attributes.LAY_CLASS as string | undefined)?.toLowerCase() ?? "";
+    const heritageClass = ep
+      ? (ep.heritage?.type.toLowerCase() ?? "")
+      : ((heritageFeature?.attributes.LAY_CLASS as string | undefined)?.toLowerCase() ?? "");
+    const hasHeritage = ep ? ep.heritage !== null : heritageF.length > 0;
+    const isConservationArea = heritageClass.includes("conservation");
     const minLotSizeFeature = minLotSizeF[0];
+    const minLotClause = ep ? ep.minLotSizeClause : ((minLotSizeFeature?.attributes.LEGIS_REF_CLAUSE as string | undefined) ?? null);
+
     return {
-      zone: (zf?.attributes.SYM_CODE as string | undefined) ?? "Unknown",
-      zoneDescription: (zf?.attributes.LAY_CLASS as string | undefined) ?? "Not resolved — verify via NSW Planning Portal",
-      minLotSizeSqm: lotSizeSqmFromFeature(minLotSizeFeature),
-      fsr: (fsrF[0]?.attributes.FSR as number | undefined) ?? null,
-      heightOfBuildingM: (heightF[0]?.attributes.MAX_B_H as number | undefined) ?? null,
+      zone: ep?.zone ?? (zf?.attributes.SYM_CODE as string | undefined) ?? "Unknown",
+      zoneDescription:
+        ep?.zoneDescription ?? (zf?.attributes.LAY_CLASS as string | undefined) ?? "Not resolved — verify via NSW Planning Portal",
+      minLotSizeSqm: ep ? ep.minLotSizeSqm : lotSizeSqmFromFeature(minLotSizeFeature),
+      fsr: ep ? ep.fsr : ((fsrF[0]?.attributes.FSR as number | undefined) ?? null),
+      heightOfBuildingM: ep ? ep.heightOfBuildingM : ((heightF[0]?.attributes.MAX_B_H as number | undefined) ?? null),
       biodiversityOverlay: biodiversityF.length > 0,
-      heritageItem: heritageF.length > 0,
-      heritageConservationArea: heritageClass.includes("conservation"),
-      heritageZoneRings: heritageFeature ? polygonToLocalRings(heritageFeature, point) : null,
+      heritageItem: hasHeritage && !isConservationArea,
+      heritageConservationArea: isConservationArea,
+      heritageZoneRings: heritageFeature && point ? polygonToLocalRings(heritageFeature, point) : null,
+      heritageListing: ep?.heritage
+        ? `${ep.heritage.type}${ep.heritage.name ? ` — ${ep.heritage.name}` : ""}${ep.heritage.clause ? ` (${ep.heritage.clause})` : ""}`
+        : null,
+      legislationUrl: ep?.legislationUrl ?? null,
+      localProvisions: ep?.localProvisions ?? [],
+      additionalPermittedUses: ep?.additionalPermittedUses ?? [],
+      greenfieldHousingCodeArea: ep ? ep.greenfieldHousingCodeArea : null,
+      precinct: ep?.precinct ?? null,
+      dcp: ep?.dcp ?? null,
       provenance: {
-        source: minLotSizeFeature
-          ? `NSW ePlanning Spatial Viewer (Principal_Planning_Layers) — live ArcGIS REST; min lot size per ${minLotSizeFeature.attributes.LEGIS_REF_CLAUSE ?? "LEP clause (unspecified)"}`
-          : "NSW ePlanning Spatial Viewer (Principal_Planning_Layers) — live ArcGIS REST",
+        source: ep
+          ? `NSW Planning Portal ePlanning API (live, property ${propId})${minLotClause ? `; min lot size per ${minLotClause}` : ""}`
+          : minLotSizeFeature
+            ? `NSW ePlanning Spatial Viewer (Principal_Planning_Layers) — live ArcGIS REST; min lot size per ${minLotClause ?? "LEP clause (unspecified)"}`
+            : "NSW ePlanning Spatial Viewer (Principal_Planning_Layers) — live ArcGIS REST",
         layerOrEpi: epiName,
         retrievedAt: nowIso(),
       },
@@ -578,15 +625,33 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
     };
   }
 
-  async daStats(_lga: string, _daType: string): Promise<DaStatsResult> {
-    return {
-      determinationsLast12Months: 0,
-      approvalRatePercent: null,
-      medianDeterminationDays: null,
-      provenance: {
-        source: "NSW Planning Portal Online DA Data API requires broker registration (data.broker@environment.nsw.gov.au) — not yet configured",
-        retrievedAt: nowIso(),
-      },
-    };
+  async daStats(council: string, daType: string): Promise<DaStatsResult> {
+    const kind = daType === "CDC" ? "CDC" : "DA";
+    try {
+      const s = await fetchCouncilApplicationStats(council, kind);
+      const outcomes =
+        kind === "CDC"
+          ? `${s.approved} approved, ${s.refused} refused, ${s.declined} declined at lodgement, ${s.withdrawn} withdrawn`
+          : `${s.decided} residential DAs determined, ${s.withdrawn} withdrawn — the public DA feed doesn't publish approve/refuse outcomes`;
+      return {
+        determinationsLast12Months: s.decided,
+        approvalRatePercent: s.approvalRatePercent,
+        medianDeterminationDays: s.medianDays,
+        withdrawnLast12Months: s.withdrawn,
+        provenance: {
+          source: `NSW Planning Portal Online${kind} feed (live) — ${council}, since ${s.windowFrom}: ${outcomes}${
+            s.medianDays !== null ? `; median ${s.medianDays} days lodgement → determination` : ""
+          }`,
+          retrievedAt: nowIso(),
+        },
+      };
+    } catch {
+      return {
+        determinationsLast12Months: 0,
+        approvalRatePercent: null,
+        medianDeterminationDays: null,
+        provenance: { source: `NSW Planning Portal Online${kind} feed unavailable for ${council}`, retrievedAt: nowIso() },
+      };
+    }
   }
 }

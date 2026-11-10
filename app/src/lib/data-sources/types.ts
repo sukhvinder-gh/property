@@ -1,7 +1,11 @@
-import type { LotPolygonPoint, Provenance } from "@/types/assessment";
+import type { LocalProvision, LotPolygonPoint, Provenance } from "@/types/assessment";
 
 export interface GeocodeResult {
   lotDp: string | null;
+  /** NSW property ID (Six Maps propid = Planning Portal ePlanning propId). */
+  propId: number | null;
+  /** Planning Portal council name (e.g. "BLACKTOWN CITY COUNCIL"). Null when unresolved. */
+  councilName: string | null;
   lga: string;
   epiName: string;
   epiAmendmentDate: string | null;
@@ -60,6 +64,14 @@ export interface PlanningControlsResult {
   biodiversityOverlay: boolean;
   /** Real heritage item/HCA boundary (rings of local-metre points). Null when unavailable. */
   heritageZoneRings: LotPolygonPoint[][] | null;
+  /** Live Planning Portal fields — absent when the ePlanning API couldn't answer. */
+  heritageListing?: string | null;
+  legislationUrl?: string | null;
+  localProvisions?: LocalProvision[];
+  additionalPermittedUses?: string[];
+  greenfieldHousingCodeArea?: boolean | null;
+  precinct?: string | null;
+  dcp?: { name: string; url: string | null } | null;
   provenance: Provenance;
 }
 
@@ -91,6 +103,7 @@ export interface DaStatsResult {
   determinationsLast12Months: number;
   approvalRatePercent: number | null;
   medianDeterminationDays: number | null;
+  withdrawnLast12Months?: number;
   provenance: Provenance;
 }
 
@@ -106,7 +119,7 @@ export interface DataSourceAdapter {
   roadAccess(lotDp: string | null, lga: string): Promise<RoadAccessResult>;
   landCapability(lotDp: string | null, lga: string): Promise<LandCapabilityResult>;
   environmentalContext(lotDp: string | null, lga: string): Promise<EnvironmentalContextResult>;
-  planningControls(lotDp: string | null, lga: string, epiName: string): Promise<PlanningControlsResult>;
+  planningControls(lotDp: string | null, lga: string, epiName: string, propId?: number | null): Promise<PlanningControlsResult>;
   constraints(lotDp: string | null, lga: string): Promise<ConstraintsResult>;
   daStats(lga: string, daType: string): Promise<DaStatsResult>;
   isCouncilProfiled(lga: string): boolean;

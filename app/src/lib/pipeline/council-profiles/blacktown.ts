@@ -6,6 +6,7 @@ import type { CouncilProfile } from "@/lib/pipeline/council-profiles/types";
  */
 export const blacktownProfile: CouncilProfile = {
   lgaKeyword: "blacktown",
+  lepName: "Blacktown Local Environmental Plan 2015",
   instrumentName: "Blacktown Development Control Plan 2015, Part C — Dwelling houses (§3.2)",
   instrumentUrl:
     "https://www.blacktown.nsw.gov.au/files/assets/public/v/4/building-and-planning/dcps-amp-lap/part-c-development-in-the-residential-areas_waste.pdf",

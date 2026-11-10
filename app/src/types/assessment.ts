@@ -21,6 +21,10 @@ export type LotPolygonPoint = z.infer<typeof LotPolygonPointSchema>;
 export const SiteProfileSchema = z.object({
   address: z.string(),
   lotDp: z.string().nullable(),
+  // NSW property ID (Six Maps propid = Planning Portal ePlanning propId).
+  propId: z.number().nullable().optional(),
+  // Planning Portal council name, e.g. "BLACKTOWN CITY COUNCIL".
+  councilName: z.string().nullable().optional(),
   lga: z.string(),
   epiName: z.string(),
   epiAmendmentDate: z.string().nullable(),
@@ -59,6 +63,14 @@ export const SiteProfileSchema = z.object({
 });
 export type SiteProfile = z.infer<typeof SiteProfileSchema>;
 
+export const LocalProvisionSchema = z.object({
+  name: z.string(),
+  value: z.string(),
+  clause: z.string().nullable(),
+  instrument: z.string(),
+});
+export type LocalProvision = z.infer<typeof LocalProvisionSchema>;
+
 export const PlanningControlsSchema = z.object({
   zone: z.string(),
   zoneDescription: z.string(),
@@ -73,6 +85,15 @@ export const PlanningControlsSchema = z.object({
   // a live source is available. Null when not present/unverified — never a
   // guessed shape.
   heritageZoneRings: z.array(z.array(LotPolygonPointSchema)).nullable().optional(),
+  // Live from the Planning Portal ePlanning API (optional so records saved
+  // before it was added still parse).
+  heritageListing: z.string().nullable().optional(),
+  legislationUrl: z.string().nullable().optional(),
+  localProvisions: z.array(LocalProvisionSchema).optional(),
+  additionalPermittedUses: z.array(z.string()).optional(),
+  greenfieldHousingCodeArea: z.boolean().nullable().optional(),
+  precinct: z.string().nullable().optional(),
+  dcp: z.object({ name: z.string(), url: z.string().nullable() }).nullable().optional(),
   provenance: z.array(ProvenanceSchema),
 });
 export type PlanningControls = z.infer<typeof PlanningControlsSchema>;
@@ -120,6 +141,8 @@ export const ScoreFactorSchema = z.object({
   weight: z.number(),
   contribution: z.number(),
   note: z.string(),
+  // What would earn the missing points (only set when contribution < weight).
+  gap: z.string().optional(),
 });
 export type ScoreFactor = z.infer<typeof ScoreFactorSchema>;
 

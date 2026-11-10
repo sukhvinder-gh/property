@@ -65,7 +65,7 @@ export function buildCouncilControls(
 ): CouncilControlsSummary {
   return {
     lepName: siteProfile.epiName,
-    dcpName: councilProfile?.instrumentName ?? null,
+    dcpName: planningControls.dcp?.name ?? councilProfile?.instrumentName ?? null,
     heritage: heritageControlText(planningControls),
     characterAndStreetscape: councilProfile?.streetscapeCharacter
       ? `${councilProfile.streetscapeCharacter.summary} (${councilProfile.streetscapeCharacter.instrumentRef})`
@@ -535,9 +535,32 @@ export function buildRisksAndUnknowns(
   return risks;
 }
 
+// SEPP-zoned land (e.g. growth-centre precincts) has its own Land Use Table
+// in the SEPP's precinct appendix — point the user there, not at the LEP.
+function governingTableRef(epiName?: string): string {
+  return epiName && /state environmental planning policy/i.test(epiName)
+    ? `the Land Use Table in ${epiName} (the precinct appendix that zones this lot)`
+    : "this council's own LEP Land Use Table";
+}
+
 export function buildPermittedUses(
   planningControls: PlanningControls,
-  councilProfile?: CouncilProfile | null
+  councilProfile?: CouncilProfile | null,
+  epiName?: string
+): DevelopmentPotential["permittedUses"] {
+  const base = zonePermittedUses(planningControls, councilProfile, epiName);
+  const extra = planningControls.additionalPermittedUses ?? [];
+  if (extra.length === 0) return base;
+  return {
+    ...base,
+    note: `${base.note} This lot is also mapped for additional permitted uses (Schedule 1 of the instrument, live from the Planning Portal): ${extra.join("; ")}.`,
+  };
+}
+
+function zonePermittedUses(
+  planningControls: PlanningControls,
+  councilProfile?: CouncilProfile | null,
+  epiName?: string
 ): DevelopmentPotential["permittedUses"] {
   if (planningControls.zone === "Unknown") {
     return { list: [], source: "Not available", note: "Zone could not be resolved — no permitted-use list can be determined." };
@@ -557,31 +580,122 @@ export function buildPermittedUses(
     return {
       list: generic,
       source: "NSW Standard Instrument—Principal LEP (generic template)",
-      note: `Typical "permitted with consent" uses for ${planningControls.zone} zones under the Standard Instrument template that most NSW LEPs are built from — this council's own LEP Land Use Table can add or remove specific uses, so treat this as a starting point, not a confirmed list for this address. Verify via the applicable LEP or a Section 10.7 planning certificate.`,
+      note: `Typical "permitted with consent" uses for ${planningControls.zone} zones under the Standard Instrument template that most NSW LEPs are built from — ${governingTableRef(epiName)} can add or remove specific uses, so treat this as a starting point, not a confirmed list for this address. Verify via the applicable instrument or a Section 10.7 planning certificate.`,
     };
   }
 
   return {
     list: [],
     source: "Not available",
-    note: `No verified permitted-use list is available in this engine for zone ${planningControls.zone} — check this council's LEP Land Use Table directly via the NSW Planning Portal or a Section 10.7 planning certificate.`,
+    note: `No verified permitted-use list is available in this engine for zone ${planningControls.zone} — check ${governingTableRef(epiName)} directly via the NSW Planning Portal or a Section 10.7 planning certificate.`,
   };
 }
 
+// Housing SEPP 2021 Chapter 3 Part 12 (commenced 1 July 2024) makes dual
+// occupancies permitted with consent in Zone R2 statewide, except on excluded
+// land. It does not override LEP minimum lot sizes, and the Low Rise Housing
+// Diversity Code (CDC) was switched off for these newly-permitted uses.
+const HOUSING_SEPP_R2_REF = "State Environmental Planning Policy (Housing) 2021, Chapter 3 Part 12";
+const HOUSING_SEPP_R2_EXCLUDED_LGAS = ["bathurst", "blue mountains", "hawkesbury", "wollondilly"];
+
+function housingSeppR2DualOccupancy(
+  siteProfile: SiteProfile,
+  planningControls: PlanningControls,
+  constraints: Constraint[]
+): DevelopmentPotential["dualOccupancy"] {
+  const lga = siteProfile.lga.toLowerCase();
+  const present = (pattern: RegExp) => constraints.some((c) => c.present && pattern.test(c.name));
+
+  const excluded: string[] = [];
+  if (HOUSING_SEPP_R2_EXCLUDED_LGAS.some((x) => lga.includes(x))) excluded.push(`the whole ${siteProfile.lga} LGA is excluded`);
+  if (present(/bushfire/i)) excluded.push("the lot is bushfire prone land");
+  if (planningControls.heritageItem) excluded.push("the lot contains a heritage item");
+  if (excluded.length) {
+    return {
+      likelyPermitted: null,
+      reasoning: `The statewide R2 dual-occupancy rule (${HOUSING_SEPP_R2_REF}) does not apply here because ${excluded.join(" and ")}. Dual occupancy is then only possible if ${governingTableRef(siteProfile.epiName)} itself permits it in zone R2 — check that table, or book a council pre-DA meeting.`,
+    };
+  }
+
+  // Exclusions that depend on detail this engine doesn't hold (ANEF contour
+  // level, which flood/coastal mapping applies) — can't confirm either way.
+  const toVerify: string[] = [];
+  if (present(/flood/i)) toVerify.push("flood-affected land is excluded in the Georges River and Hawkesbury-Nepean catchments and in listed LGAs");
+  if (present(/aircraft noise|anef/i)) toVerify.push("land at ANEF/ANEC 20 or above is excluded");
+  if (present(/coastal/i)) toVerify.push("coastal vulnerability areas, coastal wetlands and littoral rainforest are excluded");
+
+  const common = `Not checked by this engine: land within 200m of a relevant pipeline and Transport Oriented Development areas are also excluded. The council's LEP minimum lot size for dual occupancy still applies (the SEPP doesn't override it), and these newly-permitted dual occupancies need a DA — the Low Rise Housing Diversity Code CDC pathway was switched off for them; check whether it has since been restored.`;
+
+  if (toVerify.length) {
+    return {
+      likelyPermitted: null,
+      reasoning: `Zone R2 — dual occupancy is permitted with consent statewide under ${HOUSING_SEPP_R2_REF}, but this lot has a constraint that may exclude it: ${toVerify.join("; ")}. Confirm via a Section 10.7 planning certificate. ${common}`,
+    };
+  }
+  return {
+    likelyPermitted: true,
+    reasoning: `Zone R2 — dual occupancy (attached or detached) is permitted with consent under ${HOUSING_SEPP_R2_REF}, which applies to R2 land across NSW and overrides LEP prohibitions. No excluding constraint was found for this lot (not bushfire prone, no heritage item, LGA not excluded). ${common}`,
+  };
+}
+
+/**
+ * Layers the lot's live, mapped dual-occupancy provisions (from the Planning
+ * Portal — e.g. Parramatta LEP 2023 cl 6.19 "Dual Occupancy Subdivision
+ * Prohibited") over the zone-level answer. A mapped prohibition of the use
+ * itself overrides a "likely permitted"; anything else is added as a note.
+ */
 function buildDualOccupancy(
   siteProfile: SiteProfile,
   planningControls: PlanningControls,
+  constraints: Constraint[],
+  councilProfile?: CouncilProfile | null
+): DevelopmentPotential["dualOccupancy"] {
+  const base = zoneDualOccupancy(siteProfile, planningControls, constraints, councilProfile);
+  const mapped = (planningControls.localProvisions ?? []).filter((p) => /dual occupanc/i.test(`${p.name} ${p.value}`));
+  if (mapped.length === 0) return base;
+
+  const describe = (p: (typeof mapped)[number]) => `"${p.value}"${p.clause ? ` (${p.clause}, ${p.instrument})` : ` (${p.instrument})`}`;
+  const useProhibited = mapped.filter((p) => /prohibit/i.test(p.value) && !/subdivision/i.test(p.value));
+  if (useProhibited.length) {
+    return {
+      // In R2 the Housing SEPP rule may still override a local prohibition — don't call it either way.
+      likelyPermitted: planningControls.zone === "R2" ? null : false,
+      reasoning: `The Planning Portal maps this lot under ${useProhibited.map(describe).join("; ")} — a site-specific prohibition on dual occupancy.${
+        planningControls.zone === "R2"
+          ? ` Whether the statewide Housing SEPP R2 rule overrides this local map needs confirming with council or a planner.`
+          : ""
+      } ${base.reasoning}`,
+    };
+  }
+  return {
+    likelyPermitted: base.likelyPermitted,
+    reasoning: `${base.reasoning} The Planning Portal also maps this lot under ${mapped.map(describe).join("; ")}${
+      mapped.some((p) => /subdivision/i.test(p.value)) ? " — so a dual occupancy here can't later be subdivided onto separate titles" : ""
+    }.`,
+  };
+}
+
+function zoneDualOccupancy(
+  siteProfile: SiteProfile,
+  planningControls: PlanningControls,
+  constraints: Constraint[],
   councilProfile?: CouncilProfile | null
 ): DevelopmentPotential["dualOccupancy"] {
   const zone = planningControls.zone;
   const attached = councilProfile?.minLotSizeByUseAndZone?.["Dual occupancy (attached)"]?.[zone];
   const detached = councilProfile?.minLotSizeByUseAndZone?.["Dual occupancy (detached)"]?.[zone];
+  const isSepp = /state environmental planning policy/i.test(siteProfile.epiName);
 
+  if (zone === "Unknown") {
+    return { likelyPermitted: null, reasoning: "Zone could not be resolved — dual-occupancy permissibility can't be assessed." };
+  }
   if (!attached && !detached) {
+    if (zone === "R2" && !isSepp) return housingSeppR2DualOccupancy(siteProfile, planningControls, constraints);
     return {
       likelyPermitted: null,
-      reasoning:
-        "Dual-occupancy permissibility is set by each council's own LEP Land Use Table and varies materially between councils — never generalised from one LGA to another in this engine. Check the specific zone's permitted-use table for this LGA, or book a council pre-DA meeting.",
+      reasoning: isSepp
+        ? `This lot is zoned under ${siteProfile.epiName}, not the council's LEP — dual-occupancy permissibility and minimum lot sizes come from that SEPP's precinct provisions, which this engine doesn't model yet. Check ${governingTableRef(siteProfile.epiName)}, or book a council pre-DA meeting.`
+        : `Zone ${zone} — dual-occupancy permissibility in this zone is set by the council's own LEP Land Use Table, and this engine doesn't have it for ${siteProfile.lga} yet (the statewide Housing SEPP rule only covers Zone R2). Check the ${zone} permitted-use table in the council's LEP, or book a council pre-DA meeting.`,
     };
   }
   if (siteProfile.lotSizeSqm === null) {
@@ -632,10 +746,11 @@ function buildDualOccupancy(
 export function buildDevelopmentPotential(
   siteProfile: SiteProfile,
   planningControls: PlanningControls,
+  constraints: Constraint[],
   councilProfile?: CouncilProfile | null
 ): DevelopmentPotential {
   const zonePermitsResidential = /^R/.test(planningControls.zone); // same check as stage6-scoring.ts's hard gate
-  const permittedUses = buildPermittedUses(planningControls, councilProfile);
+  const permittedUses = buildPermittedUses(planningControls, councilProfile, siteProfile.epiName);
 
   let newDwellingEligible: boolean | null = null;
   let newDwellingReasoning: string;
@@ -693,7 +808,7 @@ export function buildDevelopmentPotential(
     permittedUses,
     newDwellingHouse: { eligible: newDwellingEligible, reasoning: newDwellingReasoning },
     secondaryDwelling: { eligible: secondaryEligible, reasoning: secondaryReasoning },
-    dualOccupancy: buildDualOccupancy(siteProfile, planningControls, councilProfile),
+    dualOccupancy: buildDualOccupancy(siteProfile, planningControls, constraints, councilProfile),
     subdivision: { potentialLots, reasoning: subdivisionReasoning },
   };
 }
