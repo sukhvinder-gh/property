@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Property Wealth OS — Pre-Approval Engine",
+  title: "Property Pre-Approval Engine",
   description: "NSW pre-DA feasibility assessment for residential property and development sites.",
 };
 

@@ -17,7 +17,7 @@ Disclaimers proportionate: concept questions need none; anything that could driv
 
 export function buildSystemPrompt(record: AssessmentRecord | null): string {
   if (!record) {
-    return `You are the Property Wealth OS planning assistant, in general planning chat mode (no property loaded).
+    return `You are the Property Pre-Approval Engine planning assistant, in general planning chat mode (no property loaded).
 
 Answer NSW planning concept and process questions (CDC vs DA, what a 10.7 certificate is, how setbacks work) directly and concisely.
 
@@ -35,7 +35,7 @@ ${GUARDRAILS}`;
         ? "This council is unprofiled and data-thin — the score is banded, not a point value, and DCP culture is unmodelled."
         : "This council is unprofiled but data-rich — full scoring applies, but DCP culture is unmodelled.";
 
-  return `You are the Property Wealth OS planning assistant, answering questions about a specific property that has an assessment record.
+  return `You are the Property Pre-Approval Engine planning assistant, answering questions about a specific property that has an assessment record.
 
 ${tierCaveat}
 

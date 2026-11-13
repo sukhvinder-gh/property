@@ -80,7 +80,7 @@ export default function Home() {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
-      <h1 className="text-2xl font-bold">Property Wealth OS — Pre-Approval Engine</h1>
+      <h1 className="text-2xl font-bold">Property Pre-Approval Engine</h1>
       <p className="mt-1 text-sm text-neutral-600">
         NSW pre-DA feasibility assessment. Indicative only — not a legal determination.
       </p>
