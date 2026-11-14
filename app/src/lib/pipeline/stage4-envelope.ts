@@ -1,3 +1,4 @@
+import { EASEMENT_CONSTRAINT } from "@/lib/pipeline/stage3-constraints";
 import type { CouncilProfile } from "@/lib/pipeline/council-profiles";
 import type { BuildableEnvelope, Constraint, SiteProfile } from "@/types/assessment";
 
@@ -46,11 +47,11 @@ export function runStage4BuildableEnvelope(
   const width = Math.max(0, siteProfile.frontageM - sideSetbackTotal);
   let depth = Math.max(0, siteProfile.depthM - frontM - rearM);
 
-  const hasSewerEasement = constraints.find((c) => c.name.startsWith("Sewer") && c.present);
+  const hasSewerEasement = constraints.find((c) => c.name === EASEMENT_CONSTRAINT && c.present);
   if (hasSewerEasement) {
     depth = Math.max(0, depth - ASSUMED_SEWER_EASEMENT_STRIP_M);
     assumptions.push(
-      `Depth reduced by an assumed ${ASSUMED_SEWER_EASEMENT_STRIP_M}m build-over-sewer offset strip — confirm exact alignment from the DP/title.`
+      `Depth reduced by an assumed ${ASSUMED_SEWER_EASEMENT_STRIP_M}m strip for the registered easement on this lot — confirm its exact position and width from the DP/title.`
     );
   }
 

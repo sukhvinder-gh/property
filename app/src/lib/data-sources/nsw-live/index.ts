@@ -16,10 +16,8 @@ import {
   polygonCentroid,
   polygonAreaSqm,
   boundingBoxDims,
-  polygonBoundingBoxCorners,
   polygonToLocalPoints,
   polygonToLocalRings,
-  identifyImagePixel,
   reprojectViaImageServer,
   type ArcGisFeature,
 } from "@/lib/data-sources/nsw-live/arcgis";
@@ -27,6 +25,10 @@ import { parseAddress } from "@/lib/data-sources/nsw-live/address-parser";
 import { fetchCouncilName, fetchPropertyLayers, summarisePlanning, type EPlanningPropertyPlanning } from "@/lib/data-sources/nsw-live/eplanning-api";
 import { fetchCouncilApplicationStats } from "@/lib/data-sources/nsw-live/application-stats";
 import { isCouncilProfiled } from "@/lib/pipeline/council-profiles";
+import { fetchEasementsOnLot } from "@/lib/data-sources/nsw-live/easements";
+import { contaminatedSitesNearLot, fetchEpaContaminatedSites } from "@/lib/data-sources/nsw-live/epa-contaminated-sites";
+import type { Ring } from "@/lib/data-sources/nsw-live/lot-geometry";
+import { estimateLotSlope } from "@/lib/data-sources/nsw-live/slope";
 
 /**
  * Live NSW government data adapter. Endpoints verified anonymous/CORS-open
@@ -36,8 +38,9 @@ import { isCouncilProfiled } from "@/lib/pipeline/council-profiles";
  * Coverage as of this build:
  *  - Stage 1 (site ID): live — NSW_Property (address search) + NSW_Cadastre (lot/DP + polygon)
  *  - Stage 2 (zoning/FSR/height/heritage): live — ePlanning Principal_Planning_Layers
- *  - Stage 3 (constraints): bushfire live via ePlanning hazard layer; flood/ASS/
- *    contamination/sewer/ANEF have no confirmed free live source yet — honest false/unknown
+ *  - Stage 3 (constraints): live ePlanning hazard/protection layers (bushfire, flood, ASS,
+ *    ANEF, …); registered easements from the NSW cadastre Easement layer; contamination
+ *    from the NSW EPA notified-sites list. Failed lookups are reported as unverified.
  *  - Topography (slope): no confirmed live DEM source yet — honest null
  *  - DA stats (Stage 6 input): NSW's Online DA Data API is broker-mediated
  *    (data.broker@environment.nsw.gov.au), not a public anonymous endpoint — honest null
@@ -47,9 +50,16 @@ import { isCouncilProfiled } from "@/lib/pipeline/council-profiles";
  * with a provenance note, not a fabricated fixture.
  */
 
+const PROPERTY_LAYER_PRIMARY = "https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Land_Parcel_Property_Theme/MapServer/12";
 const PROPERTY_SERVICE = "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Property/MapServer";
 const PROPERTY_LAYER_IDS = [1, 2, 3, 4]; // Large_Rural, Rural, Semi_Rural, Urban
-const CADASTRE_SERVICE = "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Cadastre/MapServer/9";
+// Lots: the official NSW Land Parcel and Property Theme "Lot" layer first; the
+// legacy Six Maps cadastre (deprecated, intermittently slow) as a fallback.
+// Same fields (lotidstring, lotnumber, planlabel) on both — verified live 2026-11.
+const CADASTRE_SERVICES = [
+  "https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Land_Parcel_Property_Theme/MapServer/8",
+  "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Cadastre/MapServer/9",
+];
 const LGA_LAYER = "https://portal.spatial.nsw.gov.au/server/rest/services/NSW_Administrative_Boundaries_Theme/MapServer/8";
 const ELEVATION_SERVICE = "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_5M_Elevation/ImageServer";
 const PLANNING_SERVICE = "https://mapprod3.environment.nsw.gov.au/arcgis/rest/services/Planning/Principal_Planning_Layers/MapServer";
@@ -96,6 +106,30 @@ const FUNCTION_HIERARCHY_NAMES: Record<number, string> = {
 
 const UNRESOLVED_LGA = "Unresolved (NSW Planning Portal — address not matched)";
 
+/**
+ * Lot query against the cadastre with failover. Returns the first non-empty
+ * answer; [] when every source answered but found nothing; throws only when
+ * every source failed — so callers can tell "no lot here" from "couldn't check".
+ */
+async function queryCadastre(params: Record<string, string>): Promise<ArcGisFeature[]> {
+  let answered = false;
+  let lastError: unknown;
+  for (const url of CADASTRE_SERVICES) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const features = await queryArcGis(url, params);
+        answered = true;
+        if (features.length > 0) return features;
+        break; // a clean empty answer — try the other source, don't retry this one
+      } catch (e) {
+        lastError = e;
+      }
+    }
+  }
+  if (answered) return [];
+  throw lastError instanceof Error ? lastError : new Error("Cadastre unavailable");
+}
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -125,15 +159,19 @@ function titleCase(s: string): string {
 // Note: `resultRecordCount` makes this endpoint return a 400 (verified — not
 // a documented limitation, just how this particular MapServer behaves), so
 // don't pass it; cap candidate volume client-side instead after fetching.
+/**
+ * Property (address) search: the official Land Parcel and Property Theme
+ * Property layer first (one layer, same propid/housenumber/address fields),
+ * then the legacy Six Maps NSW_Property sub-layers if it errors or finds nothing.
+ */
 async function queryPropertyLayers(where: string): Promise<ArcGisFeature[]> {
+  const params = { where, outFields: "propid,housenumber,address", returnGeometry: "true", returnCentroid: "true" };
+  const primary = await queryArcGis(PROPERTY_LAYER_PRIMARY, params).catch(() => null);
+  if (primary && primary.length > 0) return primary;
+
   const found: ArcGisFeature[] = [];
   for (const layerId of PROPERTY_LAYER_IDS) {
-    const features = await queryArcGis(`${PROPERTY_SERVICE}/${layerId}`, {
-      where,
-      outFields: "propid,housenumber,address",
-      returnGeometry: "true",
-      returnCentroid: "true",
-    }).catch(() => [] as ArcGisFeature[]);
+    const features = await queryArcGis(`${PROPERTY_SERVICE}/${layerId}`, params).catch(() => [] as ArcGisFeature[]);
     found.push(...features);
   }
   return found;
@@ -167,12 +205,25 @@ async function findPropertyFeature(parsed: { houseNumber: string; tokens: string
 async function resolvePointForLot(lotDp: string | null): Promise<{ x: number; y: number } | null> {
   if (!lotDp) return null;
   const escaped = lotDp.replace(/'/g, "''");
-  const features = await queryArcGis(CADASTRE_SERVICE, {
+  const features = await queryCadastre({
     where: `lotidstring='${escaped}'`,
     outFields: "lotidstring",
     returnGeometry: "true",
   }).catch(() => [] as ArcGisFeature[]);
   return polygonCentroid(features[0]);
+}
+
+/** The lot's boundary rings in WGS84 lon/lat (for easement and EPA-site checks), or null. */
+async function lotRingsWgs84(lotDp: string | null): Promise<Ring[] | null> {
+  if (!lotDp) return null;
+  const features = await queryCadastre({
+    where: `lotidstring='${lotDp.replace(/'/g, "''")}'`,
+    outFields: "lotidstring",
+    returnGeometry: "true",
+    outSR: "4326",
+  }).catch(() => [] as ArcGisFeature[]);
+  const rings = features[0]?.geometry?.rings;
+  return rings?.length ? rings.map((r) => r.map((p) => [p[0], p[1]] as [number, number])) : null;
 }
 
 /** Planning Portal ePlanning summary for a property, or null if the API can't answer (callers fall back to map layers). */
@@ -224,17 +275,18 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
 
     const propId = (property.attributes.propid as number | undefined) ?? null;
     const [cadastreFeatures, zoningFeatures, lgaFeatures, eplanning, councilName] = await Promise.all([
-      queryArcGis(CADASTRE_SERVICE, {
+      // null = cadastre unreachable (distinct from [] = no lot under this property).
+      queryCadastre({
         ...pointQuery(centroid, "lotnumber,lotidstring,planlabel"),
         returnGeometry: "true",
-      }).catch(() => [] as ArcGisFeature[]),
+      }).catch(() => null),
       queryArcGis(ZONING_LAYER, pointQuery(centroid, "LGA_NAME,EPI_NAME,COMMENCED_DATE")).catch(() => [] as ArcGisFeature[]),
       queryArcGis(LGA_LAYER, pointQuery(centroid, "lganame")).catch(() => [] as ArcGisFeature[]),
       eplanningFor(propId),
       propId ? fetchCouncilName(propId).catch(() => null) : Promise.resolve(null),
     ]);
 
-    const lotFeature = cadastreFeatures[0];
+    const lotFeature = cadastreFeatures?.[0];
     const lotDp = (lotFeature?.attributes.lotidstring as string | undefined) ?? null;
 
     const zf = zoningFeatures[0];
@@ -272,9 +324,12 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
       depthM: bbox ? Math.round(Math.max(bbox.width, bbox.height) * 10) / 10 : null,
       isCornerLot: null,
       lotPolygon,
-      registrationStatus: lotDp ? "registered" : "unregistered",
+      registrationStatus: lotDp ? "registered" : cadastreFeatures === null ? "unknown" : "unregistered",
       provenance: {
-        source: "NSW Spatial Services (Six Maps NSW_Property + NSW_Cadastre) — live ArcGIS REST",
+        source:
+          cadastreFeatures === null
+            ? "NSW Spatial Services — property matched, but the cadastre (lot) service could not be reached; lot details unverified"
+            : "NSW Spatial Services (NSW_Property + Land Parcel and Property Theme lots) — live ArcGIS REST",
         layerOrEpi: epiName,
         retrievedAt: nowIso(),
       },
@@ -289,42 +344,45 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
       };
     }
 
-    const escaped = lotDp.replace(/'/g, "''");
-    const features = await queryArcGis(CADASTRE_SERVICE, {
-      where: `lotidstring='${escaped}'`,
+    const features = await queryCadastre({
+      where: `lotidstring='${lotDp.replace(/'/g, "''")}'`,
       outFields: "lotidstring",
       returnGeometry: "true",
     }).catch(() => [] as ArcGisFeature[]);
-
-    const bbox = polygonBoundingBoxCorners(features[0]);
-    if (!bbox) {
+    const rings = features[0]?.geometry?.rings?.map((r) => r.map((p) => [p[0], p[1]] as [number, number]));
+    if (!rings?.length) {
       return {
         slopePercent: null,
         provenance: { source: "Lot polygon could not be re-resolved for elevation sampling", retrievedAt: nowIso() },
       };
     }
 
-    const [elevMin, elevMax] = await Promise.all([
-      identifyImagePixel(ELEVATION_SERVICE, bbox.min).catch(() => null),
-      identifyImagePixel(ELEVATION_SERVICE, bbox.max).catch(() => null),
-    ]);
-
-    if (elevMin === null || elevMax === null) {
+    const est = await estimateLotSlope(rings).catch(() => null);
+    if (!est) {
       return {
         slopePercent: null,
-        provenance: { source: "NSW 5m Elevation model (ImageServer) returned no data for this lot", retrievedAt: nowIso() },
+        provenance: { source: "NSW 5m elevation model returned no usable data for this lot", retrievedAt: nowIso() },
       };
     }
 
-    const dx = bbox.max.x - bbox.min.x;
-    const dy = bbox.max.y - bbox.min.y;
-    const diagonal = Math.sqrt(dx * dx + dy * dy);
-    const slopePercent = diagonal > 0 ? Math.round(((Math.abs(elevMax - elevMin) / diagonal) * 100) * 10) / 10 : 0;
-
+    const contours =
+      est.check.status === "unavailable"
+        ? ""
+        : `NSW ${est.check.contourIntervalM}m contour mapping${est.check.contourYear ? ` (${est.check.contourYear})` : ""}`;
+    const checkText =
+      est.check.status === "unavailable"
+        ? `Not cross-checked (${est.check.reason}).`
+        : est.check.status === "agrees"
+          ? `Consistent with ${contours}, which gives ~${est.check.contourFallM}m.`
+          : est.check.status === "differs"
+            ? `Older ${contours} gives ~${est.check.contourFallM}m — the ground may have been reshaped since it was mapped.`
+            : `${contours} gives a very different fall (~${est.check.contourFallM}m) — one source is likely wrong for this lot, so get levels surveyed.`;
     return {
-      slopePercent,
+      slopePercent: est.slopePercent,
+      fallM: est.fallM,
+      slopeCheck: est.check.status,
       provenance: {
-        source: `Estimated from the NSW 5m-resolution elevation model (stereo-imagery-derived DEM, live ArcGIS ImageServer), sampled at the lot's bounding-box diagonal corners (${elevMin.toFixed(1)}m and ${elevMax.toFixed(1)}m AHD) — an indicative gradient across the lot, not a surveyed cross-section; local micro-relief (retaining walls, existing cut/fill) is not captured.`,
+        source: `NSW 5m elevation model sampled at ~40 points inside the lot: high ${est.highM}m, low ${est.lowM}m AHD — a fall of ~${est.fallM}m over ${est.runM}m (~${est.slopePercent}%). ${checkText} Not a survey.`,
         retrievedAt: nowIso(),
       },
     };
@@ -544,7 +602,7 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
   }
 
   async constraints(lotDp: string | null, _lga: string): Promise<ConstraintsResult> {
-    const point = await resolvePointForLot(lotDp);
+    const [point, lotRings] = await Promise.all([resolvePointForLot(lotDp), lotRingsWgs84(lotDp)]);
 
     if (!point) {
       return {
@@ -555,6 +613,9 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
         acidSulfateSoilsClass: null,
         contamination: false,
         hasSewerEasement: false,
+        easements: null,
+        contaminatedSites: null,
+        contaminationListEdition: null,
         aircraftNoiseAnef: false,
         anefContourBand: null,
         mineSubsidenceDistrict: false,
@@ -578,6 +639,8 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
       coastalUseFeatures,
       groundwaterFeatures,
       salinityFeatures,
+      easements,
+      epa,
     ] = await Promise.all([
       queryArcGis(BUSHFIRE_LAYER, pointQuery(point, "Category")).catch(() => [] as ArcGisFeature[]),
       queryArcGis(FLOOD_LAYER, pointQuery(point, "LAY_CLASS")).catch(() => [] as ArcGisFeature[]),
@@ -589,6 +652,13 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
       queryArcGis(COASTAL_USE_AREA_LAYER, pointQuery(point, "LAY_CLASS")).catch(() => [] as ArcGisFeature[]),
       queryArcGis(GROUNDWATER_LAYER, pointQuery(point, "LAY_CLASS")).catch(() => [] as ArcGisFeature[]),
       queryArcGis(SALINITY_LAYER, pointQuery(point, "LAY_CLASS")).catch(() => [] as ArcGisFeature[]),
+      // null = couldn't check (reported as "to verify", never as "none found").
+      lotRings ? fetchEasementsOnLot(lotRings).catch(() => null) : Promise.resolve(null),
+      lotRings
+        ? fetchEpaContaminatedSites()
+            .then((listing) => ({ edition: listing.edition, sites: contaminatedSitesNearLot(listing, lotRings) }))
+            .catch(() => null)
+        : Promise.resolve(null),
     ]);
 
     const bushfireFeature = bushfireFeatures[0];
@@ -606,9 +676,11 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
       floodControlLot: floodFeatures.length > 0,
       acidSulfateSoils: assFeatures.length > 0,
       acidSulfateSoilsClass: (assFeatures[0]?.attributes.LABEL as string | undefined) ?? null,
-      // No confirmed free live statewide source for these yet — honest false, not a verified absence.
-      contamination: false,
-      hasSewerEasement: false,
+      contamination: epa?.sites.some((s) => s.onLot) ?? false,
+      hasSewerEasement: easements?.some((e) => ["sewer", "drainage", "unspecified"].includes(e.category)) ?? false,
+      easements,
+      contaminatedSites: epa?.sites ?? null,
+      contaminationListEdition: epa?.edition ?? null,
       aircraftNoiseAnef: anefFeatures.length > 0,
       anefContourBand: (anefFeatures[0]?.attributes.ANEF_CODE as string | undefined) ?? null,
       mineSubsidenceDistrict: mineSubsidenceFeatures.length > 0,
@@ -619,7 +691,7 @@ export class NswPlanningPortalAdapter implements DataSourceAdapter {
       salinity: salinityFeatures.length > 0,
       provenance: {
         source:
-          "NSW ePlanning live ArcGIS REST: bushfire (RFS Bushfire Prone Land), flood (Flood Planning Map), acid sulfate soils, airport noise (ANEF), mine subsidence district, Coastal Management SEPP areas (wetlands/environment/use area — the dedicated Coastal Vulnerability/erosion map has no statewide dataset published yet), groundwater vulnerability, and salinity. Contamination and sewer easements still have no confirmed free live statewide source.",
+          "NSW ePlanning live ArcGIS REST: bushfire (RFS Bushfire Prone Land), flood (Flood Planning Map), acid sulfate soils, airport noise (ANEF), mine subsidence district, Coastal Management SEPP areas (wetlands/environment/use area — the dedicated Coastal Vulnerability/erosion map has no statewide dataset published yet), groundwater vulnerability, and salinity. Registered easements from the NSW cadastre (Land Parcel and Property Theme, Easement layer); contamination from the NSW EPA list of notified contaminated sites (monthly file, read live).",
         retrievedAt: nowIso(),
       },
     };

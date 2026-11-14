@@ -6,7 +6,8 @@ export type CouncilTier = z.infer<typeof CouncilTierSchema>;
 export const SlopeClassSchema = z.enum(["gentle", "moderate", "steep"]);
 export type SlopeClass = z.infer<typeof SlopeClassSchema>;
 
-export const RegistrationStatusSchema = z.enum(["registered", "unregistered"]);
+// "unknown": the cadastre couldn't be reached, so registration wasn't checked.
+export const RegistrationStatusSchema = z.enum(["registered", "unregistered", "unknown"]);
 
 export const ProvenanceSchema = z.object({
   source: z.string(),
@@ -40,6 +41,8 @@ export const SiteProfileSchema = z.object({
   councilTier: CouncilTierSchema,
   slopeClass: SlopeClassSchema.nullable(),
   slopePercent: z.number().nullable(),
+  slopeFallM: z.number().nullable().optional(),
+  slopeCheck: z.enum(["agrees", "differs", "conflicts", "unavailable"]).nullable().optional(),
   // Great Soil Group regional soil-landscape classification — not a
   // parcel-specific geotechnical result. Null when not mapped.
   soilType: z.string().nullable(),
@@ -105,6 +108,9 @@ export const ConstraintSchema = z.object({
   present: z.boolean(),
   classification: ConstraintClassificationSchema,
   rationale: z.string(),
+  // False when the check couldn't be run (source unavailable) — `present: false`
+  // then means "unknown", not "confirmed absent". Omitted = checked.
+  verified: z.boolean().optional(),
   // Real overlay-zone geometry (currently only populated for bushfire on the
   // live path; mock fixtures may synthesize a clearly-labelled demo shape for
   // other constraint types). Array of rings sharing SiteProfile.lotPolygon's
@@ -156,6 +162,8 @@ export const ScoreResultSchema = z.object({
   isBanded: z.boolean(),
   topDrivers: z.array(z.string()),
   factors: z.array(ScoreFactorSchema),
+  // Why the score was held below what the factors add up to, if it was.
+  capNote: z.string().optional(),
 });
 export type ScoreResult = z.infer<typeof ScoreResultSchema>;
 

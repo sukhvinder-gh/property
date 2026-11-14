@@ -2,6 +2,7 @@ import dynamic from "next/dynamic";
 import type { AssessmentRecord } from "@/types/assessment";
 import type { DesignCheckResult } from "@/lib/design-check/schema";
 import { ApprovalChecklist } from "@/components/ApprovalChecklist";
+import { footingIndicator } from "@/lib/pipeline/soil-footing-indicator";
 import { FinancialFeasibilityCalculator } from "@/components/FinancialFeasibilityCalculator";
 
 // Hidden for now; flip to true to bring the calculator back.
@@ -37,6 +38,15 @@ function recommendationLabel(recommendation: string) {
   }
 }
 
+const titleCase = (s: string) => s.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
+
+function bandStyle(band: string) {
+  if (band === "Strong") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (band === "Viable") return "border-sky-200 bg-sky-50 text-sky-800";
+  if (band === "Marginal") return "border-amber-200 bg-amber-50 text-amber-800";
+  return "border-red-200 bg-red-50 text-red-800";
+}
+
 const fmtPts = (n: number) => String(Math.round(n * 10) / 10);
 
 /** Line-by-line breakdown of how the approval-likelihood score is built (stage6-scoring.ts). */
@@ -44,10 +54,9 @@ function ScoreBreakdown({ score }: { score: AssessmentRecord["score"] }) {
   const total = score.factors.reduce((s, f) => s + f.contribution, 0);
   const available = score.factors.reduce((s, f) => s + f.weight, 0);
   const scaled = available > 0 && available < 100;
-  const capped = score.score !== null && score.score < Math.round((total / available) * 100) - 1;
   return (
-    <div className="mt-4">
-      <h4 className="font-semibold">How the score is calculated</h4>
+    <div className="mt-5 border-t border-slate-100 pt-4">
+      <h4 className="font-semibold text-brand-900">How the score is calculated</h4>
       <p className="text-xs text-neutral-600">
         Each factor has a maximum number of points; the site earns some or all of them. The score is the sum.
       </p>
@@ -85,7 +94,7 @@ function ScoreBreakdown({ score }: { score: AssessmentRecord["score"] }) {
                   : scaled
                     ? `${fmtPts(total)} of ${fmtPts(available)} assessable points = ${score.score}/100 → ${score.bandLow}.`
                     : `${score.score}/100 → ${score.bandLow}.`}
-                {capped && " Capped at 10 because the zoning doesn't clearly permit the use."}
+                {score.capNote && ` ${score.capNote}`}
               </td>
             </tr>
           </tbody>
@@ -115,52 +124,87 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
   const isLgaUnresolved = siteProfile.lga.toLowerCase().startsWith("unresolved");
 
   return (
-    <div className="space-y-6 text-sm">
-      <div className="rounded border border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-        <strong>Live NSW data (partial coverage).</strong> Site ID, zoning/FSR/height, heritage, biodiversity, bushfire,
-        flood, acid sulfate soils, aircraft noise (ANEF), mine subsidence, Coastal Management SEPP areas, groundwater
-        vulnerability, and salinity come from live NSW Spatial Services / ePlanning ArcGIS layers. Slope is a live
-        estimate from a 5m-resolution elevation model, and soil type is a regional soil-landscape classification —
-        neither is a substitute for a survey or geotechnical report. Council approval history comes live from the
-        Planning Portal&apos;s CDC and DA feeds (the DA feed doesn&apos;t publish approve/refuse outcomes). Contamination
-        and sewer easements have no confirmed free live source yet and are honestly reported as unknown rather than
-        guessed — see Risks &amp; unknowns below.
-      </div>
+    <div className="space-y-5 text-sm">
+      <details className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-xs text-slate-600">
+        <summary className="cursor-pointer font-medium text-slate-700">
+          About the data — live NSW sources, and what isn&apos;t covered yet
+        </summary>
+        <p className="mt-2">
+          Site ID, zoning/FSR/height, heritage, biodiversity, bushfire, flood, acid sulfate soils, aircraft noise (ANEF),
+          mine subsidence, Coastal Management SEPP areas, groundwater vulnerability, and salinity come from live NSW
+          Spatial Services / ePlanning ArcGIS layers. Slope comes from the NSW 5m elevation model sampled across the
+          lot and cross-checked against NSW contour mapping (much of it from the 1970s, before many suburbs were
+          regraded). Soil and the indicative footing class come from regional soil mapping. Neither replaces a survey or a
+          geotechnical report. Registered easements come from the NSW cadastre, and contamination from the NSW EPA list of
+          notified contaminated sites (updated monthly). The EPA list only covers sites reported to the EPA, and sewer
+          mains without a registered easement aren&apos;t on title, so confirm both via the Section 10.7 certificate and
+          Sydney Water&apos;s Tap in service. Council approval history comes live from the Planning Portal&apos;s CDC and DA
+          feeds; the public DA feed doesn&apos;t say whether a DA was approved or refused, so only CDC approval rates
+          count towards the score.
+        </p>
+      </details>
       {isUnresolvedAddress && (
-        <div className="rounded border border-red-400 bg-red-50 px-3 py-2 text-xs text-red-900">
+        <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-2.5 text-xs text-red-900">
           This address could not be resolved against NSW property/cadastre data — every control and constraint below
           is an unverified unknown, not a real lookup. The low score reflects that unresolved zoning is treated as a
           hard gate, not an actual assessment of this property.
         </div>
       )}
       {!isUnresolvedAddress && isLgaUnresolved && (
-        <div className="rounded border border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs text-amber-900">
           The lot resolved correctly, but this parcel&apos;s zoning record didn&apos;t carry an LGA name (common for
           precinct/growth-centre SEPP-zoned land) — verify the council via a Section 10.7 certificate.
         </div>
       )}
-      <header>
-        <h2 className="text-lg font-semibold">Pre-Approval Feasibility Report — {siteProfile.address}</h2>
-        <p className="mt-1">
-          <span className="font-medium">Verdict:</span> {bandLabel(record)} — recommended pathway:{" "}
-          <span className="uppercase">{pathway.pathway}</span>
+      <header className="card">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Pre-approval feasibility report</p>
+            <h2 className="mt-1 text-xl font-semibold tracking-tight text-brand-900">{siteProfile.address}</h2>
+            <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-xs sm:grid-cols-4">
+              {[
+                ["Lot / DP", siteProfile.lotDp ?? "Unknown"],
+                ["Council", titleCase(siteProfile.councilName ?? siteProfile.lga)],
+                ["Zone", planningControls.zone],
+                ["Lot size", siteProfile.lotSizeSqm ? `${siteProfile.lotSizeSqm} m²` : "Unknown"],
+              ].map(([k, v]) => (
+                <div key={k}>
+                  <dt className="text-slate-500">{k}</dt>
+                  <dd className="font-medium text-slate-800">{v}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+          <div className={`shrink-0 rounded-xl border px-5 py-4 text-center ${bandStyle(score.bandLow)}`}>
+            <div className="text-4xl font-semibold leading-none">
+              {score.score ?? "—"}
+              {score.score !== null && <span className="text-base font-normal opacity-60">/100</span>}
+            </div>
+            <div className="mt-1.5 text-sm font-medium">{score.isBanded ? bandLabel(record) : score.bandLow}</div>
+            <div className="mt-2 inline-block rounded-full bg-white/70 px-2.5 py-0.5 text-xs font-medium uppercase tracking-wide">
+              {pathway.pathway} pathway
+            </div>
+          </div>
+        </div>
+        <p className="mt-4 border-t border-slate-100 pt-3 text-sm text-slate-700">
+          <span className="font-medium text-slate-900">Recommendation:</span>{" "}
+          {recommendationLabel(record.feasibilitySummary.recommendation)} — overall risk{" "}
+          {record.feasibilitySummary.overallRiskRating}.
         </p>
         {siteProfile.indicativeOnly && (
-          <p className="mt-1 text-amber-700">Indicative only — lot dimensions or registration not fully confirmed.</p>
+          <p className="mt-1 text-xs text-amber-700">Indicative only — lot dimensions or registration not fully confirmed.</p>
         )}
       </header>
 
-      <section className="rounded border px-3 py-2">
+      <section className="card">
         <ApprovalChecklist record={record} design={designResult ?? null} />
-        <p className="mt-2 text-xs text-neutral-600">
-          Score {score.score ?? `${score.bandHigh}–${score.bandLow}`}
-          {score.score !== null ? "/100" : ""} ({score.bandLow}) — see the score breakdown in the Feasibility summary at
-          the end of the report.
+        <p className="mt-3 text-xs text-slate-500">
+          See how the score is calculated in the Feasibility summary at the end of the report.
         </p>
       </section>
 
-      <section>
-        <h3 className="font-semibold">Site profile</h3>
+      <section className="card">
+        <h3 className="section-title">Site profile</h3>
         <ul className="mt-1 list-disc pl-5">
           <li>Lot/DP: {siteProfile.lotDp ?? "unregistered / unknown"}</li>
           <li>LGA: {siteProfile.lga}</li>
@@ -174,17 +218,21 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
           <li>Registration: {siteProfile.registrationStatus}</li>
           <li>
             Slope: {siteProfile.slopeClass ?? "unknown"} ({siteProfile.slopePercent ?? "?"}%)
+            {siteProfile.slopeFallM != null && ` — falls ~${siteProfile.slopeFallM}m across the lot`}
           </li>
           <li>
-            Soil type: {siteProfile.soilType ? `${siteProfile.soilType} (${siteProfile.soilTypeCode})` : "not mapped"} —
-            regional indicator only, not a geotechnical result
+            Soil type: {siteProfile.soilType ? `${siteProfile.soilType} (${siteProfile.soilTypeCode})` : "not mapped"}
+            {footingIndicator(siteProfile.soilTypeCode)
+              ? ` — ${footingIndicator(siteProfile.soilTypeCode)!.summary}; indicative site class ${footingIndicator(siteProfile.soilTypeCode)!.range}`
+              : ""}{" "}
+            (regional mapping, not a geotechnical result)
           </li>
           <li>Council tier: {siteProfile.councilTier.replace(/_/g, " ")}</li>
         </ul>
       </section>
 
-      <section>
-        <h3 className="font-semibold">Planning controls</h3>
+      <section className="card">
+        <h3 className="section-title">Planning controls</h3>
         <ul className="mt-1 list-disc pl-5">
           <li>
             Zone: {planningControls.zone} — {planningControls.zoneDescription}
@@ -217,8 +265,8 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
         )}
       </section>
 
-      <section>
-        <h3 className="font-semibold">Council controls</h3>
+      <section className="card">
+        <h3 className="section-title">Council controls</h3>
         <ul className="mt-1 list-disc pl-5">
           <li>LEP: {record.councilControls.lepName}</li>
           <li>
@@ -239,16 +287,16 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
         </ul>
       </section>
 
-      <section>
-        <h3 className="font-semibold">Utilities &amp; services</h3>
+      <section className="card">
+        <h3 className="section-title">Utilities &amp; services</h3>
         <ul className="mt-1 list-disc pl-5">
           <li>Electricity distributor: {record.utilities.electricityDistributor}</li>
           <li>{record.utilities.otherServicesNote}</li>
         </ul>
       </section>
 
-      <section>
-        <h3 className="font-semibold">Access</h3>
+      <section className="card">
+        <h3 className="section-title">Access</h3>
         <ul className="mt-1 list-disc pl-5">
           <li>Driveway gradient: {record.access.drivewayGradient}</li>
           <li>Road frontage: {record.access.roadFrontage}</li>
@@ -257,8 +305,8 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
         </ul>
       </section>
 
-      <section>
-        <h3 className="font-semibold">Engineering</h3>
+      <section className="card">
+        <h3 className="section-title">Engineering</h3>
         <ul className="mt-1 list-disc pl-5">
           <li>Stormwater concept: {record.engineering.stormwaterConcept}</li>
           <li>Rainwater tank: {record.engineering.rainwaterTank}</li>
@@ -269,8 +317,8 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
         </ul>
       </section>
 
-      <section>
-        <h3 className="font-semibold">Environmental</h3>
+      <section className="card">
+        <h3 className="section-title">Environmental</h3>
         <ul className="mt-1 list-disc pl-5">
           <li>BASIX &amp; NatHERS: {record.environmental.basixAndNatHers}</li>
           <li>Solar access: {record.environmental.solarAccess}</li>
@@ -279,8 +327,8 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
         </ul>
       </section>
 
-      <section>
-        <h3 className="font-semibold">Construction feasibility</h3>
+      <section className="card">
+        <h3 className="section-title">Construction feasibility</h3>
         <ul className="mt-1 list-disc pl-5">
           <li>Site access for machinery: {record.constructionFeasibility.siteAccessForMachinery}</li>
           <li>Crane requirements: {record.constructionFeasibility.craneRequirements}</li>
@@ -291,8 +339,8 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
         </ul>
       </section>
 
-      <section>
-        <h3 className="font-semibold">Cost assessment</h3>
+      <section className="card">
+        <h3 className="section-title">Cost assessment</h3>
         <ul className="mt-1 list-disc pl-5">
           <li>Land value &amp; construction: {record.costAssessment.landValueAndConstruction}</li>
           <li>Site-specific cost drivers: {record.costAssessment.siteSpecificCostDrivers}</li>
@@ -301,8 +349,8 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
         </ul>
       </section>
 
-      <section>
-        <h3 className="font-semibold">What you can likely build</h3>
+      <section className="card">
+        <h3 className="section-title">What you can likely build</h3>
         {record.developmentPotential.permittedUses.list.length > 0 && (
           <div className="mt-1 text-sm">
             <p>
@@ -354,8 +402,8 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
         </ul>
       </section>
 
-      <section>
-        <h3 className="font-semibold">Buildable envelope</h3>
+      <section className="card">
+        <h3 className="section-title">Buildable envelope</h3>
         {buildableEnvelope.envelopeAreaSqm !== null ? (
           <p className="mt-1">
             ~{buildableEnvelope.envelopeAreaSqm} m² ({buildableEnvelope.envelopeWidthM}m × {buildableEnvelope.envelopeDepthM}m)
@@ -377,13 +425,13 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
         </ul>
       </section>
 
-      <section>
-        <h3 className="font-semibold">3D massing (indicative)</h3>
+      <section className="card">
+        <h3 className="section-title">3D massing (indicative)</h3>
         <MassingView record={record} />
       </section>
 
-      <section>
-        <h3 className="font-semibold">Constraints</h3>
+      <section className="card">
+        <h3 className="section-title">Constraints</h3>
         <table className="mt-1 w-full border-collapse text-left text-xs">
           <thead>
             <tr className="border-b">
@@ -406,8 +454,8 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
         </table>
       </section>
 
-      <section>
-        <h3 className="font-semibold">Site cost signals</h3>
+      <section className="card">
+        <h3 className="section-title">Site cost signals</h3>
         <ul className="mt-1 list-disc pl-5">
           {record.costSignals.map((c, i) => (
             <li key={i}>{c}</li>
@@ -417,8 +465,8 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
 
       {SHOW_FINANCIAL_CALCULATOR && <FinancialFeasibilityCalculator />}
 
-      <section>
-        <h3 className="font-semibold">Approval pathway & timeline</h3>
+      <section className="card">
+        <h3 className="section-title">Approval pathway & timeline</h3>
         <p className="mt-1">{pathway.reasoning}</p>
         <p className="mt-1">Indicative timeline: {pathway.indicativeTimelineDays}</p>
         {pathway.cdcExclusionTriggers.length > 0 && (
@@ -430,8 +478,8 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
         )}
       </section>
 
-      <section>
-        <h3 className="font-semibold">Approval strategy</h3>
+      <section className="card">
+        <h3 className="section-title">Approval strategy</h3>
         <ul className="mt-1 list-disc pl-5">
           <li>Consent authority: {record.approvalStrategy.consentAuthority}</li>
           <li>Integrated/concurrent approvals: {record.approvalStrategy.integratedApprovals}</li>
@@ -440,8 +488,8 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
         </ul>
       </section>
 
-      <section>
-        <h3 className="font-semibold">Approval likelihood — top drivers</h3>
+      <section className="card">
+        <h3 className="section-title">Approval likelihood — top drivers</h3>
         <ul className="mt-1 list-disc pl-5">
           {score.topDrivers.map((d, i) => (
             <li key={i}>{d}</li>
@@ -449,8 +497,8 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
         </ul>
       </section>
 
-      <section>
-        <h3 className="font-semibold">Document checklist</h3>
+      <section className="card">
+        <h3 className="section-title">Document checklist</h3>
         <ul className="mt-1 list-disc pl-5">
           {record.documentChecklist.map((d, i) => (
             <li key={i}>{d}</li>
@@ -458,8 +506,8 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
         </ul>
       </section>
 
-      <section>
-        <h3 className="font-semibold">Risks & unknowns</h3>
+      <section className="card">
+        <h3 className="section-title">Risks & unknowns</h3>
         <ul className="mt-1 list-disc pl-5">
           {record.risksAndUnknowns.map((r, i) => (
             <li key={i}>{r}</li>
@@ -467,8 +515,8 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
         </ul>
       </section>
 
-      <section>
-        <h3 className="font-semibold">Risk register</h3>
+      <section className="card">
+        <h3 className="section-title">Risk register</h3>
         {record.riskRegister.length === 0 ? (
           <p className="mt-1 text-neutral-600">
             No material risks identified from the checks run — this does not mean the site is risk-free, only that no red
@@ -496,8 +544,8 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
         )}
       </section>
 
-      <section>
-        <h3 className="font-semibold">Next steps</h3>
+      <section className="card">
+        <h3 className="section-title">Next steps</h3>
         <ol className="mt-1 list-decimal pl-5">
           {record.nextSteps.map((s, i) => (
             <li key={i}>{s}</li>
@@ -505,8 +553,8 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
         </ol>
       </section>
 
-      <section className="rounded border px-3 py-2">
-        <h3 className="font-semibold">Feasibility summary</h3>
+      <section className="card">
+        <h3 className="section-title">Feasibility summary</h3>
         <ul className="mt-1 list-disc pl-5">
           <li>Planning feasibility: {feasibilityLabel(record.feasibilitySummary.planningFeasibility)}</li>
           <li>Engineering feasibility: {feasibilityLabel(record.feasibilitySummary.engineeringFeasibility)}</li>
@@ -523,7 +571,7 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
         <ScoreBreakdown score={score} />
       </section>
 
-      <p className="border-t pt-3 text-xs text-neutral-500">
+      <p className="px-1 text-xs text-slate-500">
         Not legal or planning advice. Planning controls change — verify current figures against the LEP, Codes SEPP, and
         NSW Planning Portal, or via a Section 10.7 planning certificate, before making a purchase or build decision.
       </p>

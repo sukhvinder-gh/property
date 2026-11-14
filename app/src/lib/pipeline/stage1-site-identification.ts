@@ -47,6 +47,8 @@ export async function runStage1SiteIdentification(
     councilTier,
     slopeClass: classifySlope(topo.slopePercent),
     slopePercent: topo.slopePercent,
+    slopeFallM: topo.fallM ?? null,
+    slopeCheck: topo.slopeCheck ?? null,
     soilType: soil.soilType,
     soilTypeCode: soil.soilTypeCode,
     nearbyClassifiedRoad: road.nearbyClassifiedRoad,

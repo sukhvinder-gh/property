@@ -1,3 +1,4 @@
+import { CONTAMINATION_CONSTRAINT } from "@/lib/pipeline/stage3-constraints";
 import type { Constraint, Pathway, PlanningControls, SiteProfile } from "@/types/assessment";
 
 export function runStage5Pathway(
@@ -33,6 +34,10 @@ export function runStage5Pathway(
     triggers.push(
       `Lot size ${siteProfile.lotSizeSqm}m² is below this zone's minimum lot size of ${planningControls.minLotSizeSqm}m² (live LSZ layer) — subdivision-dependent CDC pathways are likely excluded; a standalone dwelling on the existing lot may still be unaffected. Verify against the specific Codes SEPP/Housing SEPP division for the proposed development type.`
     );
+  }
+  const contamination = constraints.find((c) => c.name === CONTAMINATION_CONSTRAINT);
+  if (contamination?.present && contamination.classification === "blocker") {
+    triggers.push("On the NSW EPA contaminated-sites list and still regulated or under investigation — complying development is generally excluded on significantly contaminated land; expect a DA with a contamination report. Confirm via the Section 10.7 certificate.");
   }
   if (siteProfile.registrationStatus === "unregistered") {
     triggers.push("Lot is unregistered — a CDC generally cannot be issued until the lot is registered.");

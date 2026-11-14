@@ -162,7 +162,19 @@ export function runStage6Scoring(
 
   const available = factors.reduce((sum, f) => sum + f.weight, 0);
   const rawScore = (factors.reduce((sum, f) => sum + f.contribution, 0) / available) * 100;
-  const cappedScore = zonePermits ? rawScore : Math.min(rawScore, 10);
+  // A hard blocker (e.g. land the EPA is still regulating for contamination)
+  // can't be outweighed by good scores elsewhere: hold the result at the top
+  // of "Marginal" until it's resolved.
+  const BLOCKER_CAP = 49;
+  let cappedScore = rawScore;
+  let capNote: string | undefined;
+  if (!zonePermits && rawScore > 10) {
+    cappedScore = 10;
+    capNote = "Capped at 10 because the zoning doesn't clearly permit the use.";
+  } else if (presentBlockers.length > 0 && rawScore > BLOCKER_CAP) {
+    cappedScore = BLOCKER_CAP;
+    capNote = `Capped at ${BLOCKER_CAP} (Marginal) because of a blocker: ${presentBlockers.map((c) => c.name).join(", ")}. It can't score higher until that's resolved.`;
+  }
   const score = Math.round(Math.max(0, Math.min(100, cappedScore)));
 
   const sortedDrivers = [...factors].sort((a, b) => b.contribution / b.weight - a.contribution / a.weight);
@@ -180,6 +192,7 @@ export function runStage6Scoring(
       isBanded: true,
       topDrivers,
       factors,
+      capNote,
     };
   }
 
@@ -191,5 +204,6 @@ export function runStage6Scoring(
     isBanded: false,
     topDrivers,
     factors,
+    capNote,
   };
 }

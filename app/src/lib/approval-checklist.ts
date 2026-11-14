@@ -1,4 +1,5 @@
 import type { DesignCheckResult } from "@/lib/design-check/schema";
+import { footingIndicator } from "@/lib/pipeline/soil-footing-indicator";
 import type { AssessmentRecord } from "@/types/assessment";
 
 export type Status = "pass" | "fail" | "warn" | "unknown" | "points";
@@ -23,8 +24,12 @@ export function buildRows(record: AssessmentRecord, design: DesignCheckResult | 
   rows.push({
     group: addr,
     requirement: "Lot identified in NSW records",
-    status: site.lotDp ? "pass" : "fail",
-    detail: site.lotDp ? `Lot ${site.lotDp}, ${site.lotSizeSqm ?? "?"}m², ${site.frontageM ?? "?"}m wide` : "Address not matched — nothing below is verified.",
+    status: site.lotDp ? "pass" : site.registrationStatus === "unknown" ? "unknown" : "fail",
+    detail: site.lotDp
+      ? `Lot ${site.lotDp}, ${site.lotSizeSqm ?? "?"}m², ${site.frontageM ?? "?"}m wide`
+      : site.registrationStatus === "unknown"
+        ? "Address found, but the NSW lot register couldn't be reached just now — try again shortly; lot-based checks below are unverified."
+        : "Address not matched — nothing below is verified.",
   });
   if (site.registrationStatus === "unregistered") {
     rows.push({ group: addr, requirement: "Lot is registered", status: "warn", detail: "Unregistered lot — a CDC generally can't be issued until the lot is registered." });
@@ -96,10 +101,19 @@ export function buildRows(record: AssessmentRecord, design: DesignCheckResult | 
     rows.push({
       group: "Site constraints",
       requirement: `No ${c.name.toLowerCase()}`,
-      status: !c.present ? "pass" : c.classification === "blocker" ? "fail" : "warn",
+      status: c.verified === false ? "unknown" : !c.present ? "pass" : c.classification === "blocker" ? "fail" : "warn",
       detail: c.rationale,
     });
   }
+  const footing = footingIndicator(site.soilTypeCode);
+  rows.push({
+    group: "Site constraints",
+    requirement: "Ground suitable for standard footings",
+    status: !footing ? "unknown" : footing.costly ? "warn" : "pass",
+    detail: footing
+      ? `Regional soil mapping: ${site.soilType} — ${footing.summary} (indicative AS 2870 site class ${footing.range}). A geotechnical report on the lot sets the actual class.`
+      : "No regional soil mapping for this lot — a geotechnical report will set the footing class.",
+  });
 
   rows.push({
     group: "Approval pathway",
@@ -140,6 +154,9 @@ export function buildRows(record: AssessmentRecord, design: DesignCheckResult | 
       status: "points",
       detail: `−${fmtPts(lost)} pts. ${f.gap ?? f.note}`,
     });
+  }
+  if (record.score.capNote) {
+    rows.push({ group: "Score — points not earned", requirement: "Score cap", status: "fail", detail: record.score.capNote });
   }
   return rows;
 }

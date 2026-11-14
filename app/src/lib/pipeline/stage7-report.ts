@@ -1,3 +1,4 @@
+import { CONTAMINATION_CONSTRAINT, EASEMENT_CONSTRAINT } from "@/lib/pipeline/stage3-constraints";
 import {
   NEW_DWELLING_HOUSE_DEFAULT_MIN_LOT_SQM,
   NEW_DWELLING_HOUSE_MIN_WIDTH_M,
@@ -340,7 +341,7 @@ const CONSTRAINT_MITIGATIONS: Record<string, string> = {
   "Bushfire prone land": "Commission a bushfire assessment / Bushfire Attack Level (BAL) rating before finalising design.",
   "Acid sulfate soils": "Commission an acid sulfate soil management plan before any excavation.",
   Contamination: "Commission a contamination assessment and remediation/validation report before lodging.",
-  "Sewer main / easement": "Confirm exact easement location and width from title documents; may require Sydney Water build-over-sewer approval.",
+  [EASEMENT_CONSTRAINT]: "Confirm exact easement location and width from the title/DP and keep the footprint clear; a sewer or drainage easement may need Sydney Water or council approval.",
   "Aircraft noise (ANEF)": "Confirm acoustic construction requirements against the current ANEF contour before design.",
   "Topography / slope": "Commission a geotechnical assessment; budget for retaining walls and/or cut-fill.",
   "Mine subsidence district": "Contact Subsidence Advisory NSW / the Mine Subsidence Board before design; budget for additional footing and structural engineering.",
@@ -445,12 +446,16 @@ export function buildCostSignals(constraints: Constraint[], siteProfile: SitePro
       signals.push("Flood: raised floor levels and/or on-site detention (OSD) likely required.");
     } else if (c.name.startsWith("Bushfire")) {
       signals.push("Bushfire: BAL-rated construction upgrades likely required.");
-    } else if (c.name.startsWith("Sewer")) {
-      signals.push("Services: build-over-sewer approval and possible footprint relocation.");
+    } else if (c.name === EASEMENT_CONSTRAINT) {
+      signals.push("Easement: footprint must avoid the easement; build-over approval may be needed for sewer/drainage lines.");
     } else if (c.name.startsWith("Acid sulfate")) {
       signals.push("Soil: acid sulfate soil management plan likely required for excavation.");
-    } else if (c.name.startsWith("Contamination")) {
-      signals.push("Contamination: remediation/validation likely required before consent.");
+    } else if (c.name === CONTAMINATION_CONSTRAINT) {
+      signals.push(
+        c.classification === "documentation-adder"
+          ? "Contamination: EPA-notified site nearby — a preliminary site investigation may be requested."
+          : "Contamination: site investigation, and possibly remediation/validation, likely required before consent."
+      );
     } else if (c.name.startsWith("Mine subsidence")) {
       signals.push("Mine subsidence: additional footings/engineering design and Mine Subsidence Board approval likely required.");
     } else if (c.name.startsWith("Coastal management")) {
@@ -519,9 +524,12 @@ export function buildRisksAndUnknowns(
   for (const a of envelope.assumptions) {
     risks.push(`Assumption: ${a}`);
   }
-  const easementConstraint = constraints.find((c) => c.name.startsWith("Sewer"));
+  const easementConstraint = constraints.find((c) => c.name === EASEMENT_CONSTRAINT);
   if (easementConstraint?.present) {
-    risks.push("Easement geometry sourced from a flag, not the parsed DP — confirm exact easement location and width from title documents.");
+    risks.push("Easement position and width come from the NSW cadastre map — confirm the exact location and terms on the title and deposited plan.");
+  }
+  for (const c of constraints) {
+    if (c.verified === false) risks.push(`${c.name} couldn't be checked this time (data source unavailable) — ${c.rationale}`);
   }
   risks.push(
     "Restrictive covenants, rights of carriageway, encroachments, existing structures, boundary fencing, and significant individual trees are not visible from any spatial layer this engine checks — confirm via a title search (Section 10.7 certificate + title/DP) and a site survey before relying on this report for these items."

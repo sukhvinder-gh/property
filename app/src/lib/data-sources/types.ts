@@ -15,12 +15,16 @@ export interface GeocodeResult {
   isCornerLot: boolean | null;
   /** Local metres, origin = lot centroid, true-north-oriented. Null when no real polygon is available. */
   lotPolygon: LotPolygonPoint[] | null;
-  registrationStatus: "registered" | "unregistered";
+  registrationStatus: "registered" | "unregistered" | "unknown";
   provenance: Provenance;
 }
 
 export interface TopographyResult {
   slopePercent: number | null;
+  /** Fall between the lot's highest and lowest sampled points, metres. */
+  fallM?: number | null;
+  /** Whether NSW contour lines confirm the elevation-model fall. */
+  slopeCheck?: "agrees" | "differs" | "conflicts" | "unavailable" | null;
   provenance: Provenance;
 }
 
@@ -75,6 +79,29 @@ export interface PlanningControlsResult {
   provenance: Provenance;
 }
 
+/** A registered easement that falls on the lot (NSW cadastre Easement layer). */
+export interface EasementFinding {
+  /** e.g. "Easement for sewer", or "Easement (purpose not recorded in the cadastre)". */
+  purpose: string;
+  category: "sewer" | "drainage" | "water" | "electricity" | "gas" | "access" | "services" | "other" | "unspecified";
+  /** As recorded, e.g. "3m"; null when the cadastre has no width. */
+  width: string | null;
+}
+
+/** A site on the NSW EPA notified contaminated-sites list, on or near the lot. */
+export interface ContaminatedSiteFinding {
+  siteName: string;
+  address: string;
+  activity: string;
+  /** EPA management class, e.g. "Contamination currently regulated under CLM Act". */
+  status: string;
+  onLot: boolean;
+  /** Metres from the lot boundary (0 when on the lot). */
+  distanceM: number;
+  /** True when the EPA is actively regulating/investigating/managing the site. */
+  activelyManaged: boolean;
+}
+
 export interface ConstraintsResult {
   floodControlLot: boolean;
   bushfireProneLand: boolean;
@@ -83,6 +110,15 @@ export interface ConstraintsResult {
   acidSulfateSoilsClass: string | null;
   contamination: boolean;
   hasSewerEasement: boolean;
+  /**
+   * Live easement lookup. Undefined: adapter doesn't do this lookup (use
+   * hasSewerEasement). Null: lookup attempted but failed — unknown, not "none".
+   */
+  easements?: EasementFinding[] | null;
+  /** Live EPA list matches within 100m. Undefined/null as for `easements`. */
+  contaminatedSites?: ContaminatedSiteFinding[] | null;
+  /** EPA list edition used, e.g. "July 2026". */
+  contaminationListEdition?: string | null;
   aircraftNoiseAnef: boolean;
   /** Real ANEF contour band (e.g. "25 - 30"). Null when not present/unavailable. */
   anefContourBand: string | null;
