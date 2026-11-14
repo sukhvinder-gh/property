@@ -113,11 +113,11 @@ export function AddressAutocomplete({
         autoComplete="off"
       />
       {open && suggestions.length > 0 && (
-        <ul className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded border bg-white text-sm shadow">
+        <ul className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-lg">
           {suggestions.map((s, i) => (
             <li
               key={s.placeId}
-              className={`cursor-pointer px-3 py-2 ${i === activeIndex ? "bg-neutral-100" : ""}`}
+              className={`cursor-pointer px-3 py-2 ${i === activeIndex ? "bg-brand-50 text-brand-800" : "text-slate-700"}`}
               onMouseDown={(e) => {
                 e.preventDefault();
                 select(s);

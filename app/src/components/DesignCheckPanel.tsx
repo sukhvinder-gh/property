@@ -29,9 +29,9 @@ export function DesignCheckResults({ result }: { result: DesignCheckResult }) {
   const unknown = result.checks.filter((c) => c.status === "unknown");
 
   return (
-    <div className="space-y-4 rounded border p-4 text-sm">
+    <div className="card space-y-4 text-sm">
       <div>
-        <h2 className="text-lg font-semibold">
+        <h2 className="section-title text-lg">
           House design check{result.extracted.designName ? ` — ${result.extracted.designName}` : ""}
         </h2>
         <p className="text-xs text-neutral-600">
@@ -42,7 +42,7 @@ export function DesignCheckResults({ result }: { result: DesignCheckResult }) {
 
       <>
         <div className="space-y-4">
-          <div className={`rounded border px-3 py-2 ${VERDICT_STYLE[result.verdict].className}`}>
+          <div className={`rounded-lg border px-4 py-3 ${VERDICT_STYLE[result.verdict].className}`}>
             <div className="font-semibold">{VERDICT_STYLE[result.verdict].label}</div>
             <div>{result.headline}</div>
           </div>

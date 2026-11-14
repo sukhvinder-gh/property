@@ -76,21 +76,28 @@ export function ChatPanel({ record }: { record: AssessmentRecord | null }) {
   });
 
   return (
-    <div className="flex h-full flex-col rounded border">
-      <div className="border-b px-3 py-2 text-sm font-semibold">
+    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-200 bg-brand-900 px-4 py-3 text-sm font-semibold text-white">
         {record ? "Ask about this property" : "Ask a planning question"}
       </div>
-      <div className="flex-1 space-y-3 overflow-y-auto p-3 text-sm">
+      <div className="flex-1 space-y-3 overflow-y-auto p-4 text-sm">
+        {messages.length === 0 && (
+          <p className="text-slate-500">
+            {record
+              ? "Ask anything about this report — why the score is what it is, what a control means, or what to do next."
+              : "Ask a general NSW planning question — CDC vs DA, granny flat rules, setbacks and more."}
+          </p>
+        )}
         {messages.map((m) => (
           <div key={m.id} className={m.role === "user" ? "text-right" : "text-left"}>
-            <div className={`inline-block max-w-[85%] rounded px-3 py-2 ${m.role === "user" ? "bg-neutral-800 text-white" : "bg-neutral-100"}`}>
+            <div className={`inline-block max-w-[85%] rounded-2xl px-3.5 py-2 ${m.role === "user" ? "bg-brand-700 text-white" : "bg-slate-100 text-slate-800"}`}>
               {m.parts.map((part, i) => (part.type === "text" ? <FormattedText key={i} text={part.text} /> : null))}
             </div>
           </div>
         ))}
       </div>
       <form
-        className="flex gap-2 border-t p-2"
+        className="flex gap-2 border-t border-slate-200 p-3"
         onSubmit={(e) => {
           e.preventDefault();
           if (!input.trim()) return;
@@ -99,12 +106,12 @@ export function ChatPanel({ record }: { record: AssessmentRecord | null }) {
         }}
       >
         <input
-          className="flex-1 rounded border px-2 py-1 text-sm"
+          className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100"
           value={input}
           placeholder={record ? "Why is my score X?" : "What's a CDC?"}
           onChange={(e) => setInput(e.target.value)}
         />
-        <button type="submit" disabled={status === "streaming"} className="rounded bg-neutral-800 px-3 py-1 text-sm text-white disabled:opacity-50">
+        <button type="submit" disabled={status === "streaming"} className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white hover:bg-accent-600 disabled:opacity-50">
           Send
         </button>
       </form>

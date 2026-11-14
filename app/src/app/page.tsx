@@ -79,89 +79,132 @@ export default function Home() {
     step === "address" ? "Checking address…" : step === "design" ? "Reading plans…" : designFile ? "Check address & design" : "Run assessment";
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
-      <h1 className="text-2xl font-bold">Property Pre-Approval Engine</h1>
-      <p className="mt-1 text-sm text-neutral-600">
-        NSW pre-DA feasibility assessment. Indicative only — not a legal determination.
-      </p>
+    <div className="flex min-h-screen flex-col">
+      <nav className="bg-brand-900 text-white">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500 text-sm font-bold">P</span>
+            <span className="font-semibold tracking-tight">Property Pre-Approval Engine</span>
+          </div>
+          <span className="rounded-full border border-white/20 px-2.5 py-0.5 text-xs text-white/80">NSW</span>
+        </div>
+      </nav>
 
-      <div className="mt-6 flex gap-2">
-        <AddressAutocomplete
-          className="w-full rounded border px-3 py-2 text-sm"
-          placeholder="e.g. 12 Sample St, Marsden Park NSW"
-          value={address}
-          onChange={setAddress}
-          onSelect={(picked) => (pickedAddress.current = picked)}
-          onSubmit={run}
-        />
-        <button
-          onClick={run}
-          disabled={busy || !address.trim()}
-          className="shrink-0 rounded bg-neutral-800 px-4 py-2 text-sm text-white disabled:opacity-50"
-        >
-          {buttonLabel}
-        </button>
-      </div>
+      <header className="bg-gradient-to-b from-brand-900 to-brand-700 pb-16 pt-8 text-white">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Can you build it? Find out before you buy.</h1>
+          <p className="mt-2 max-w-2xl text-sm text-white/75">
+            Instant pre-DA feasibility for any NSW address — zoning, controls, constraints, approval pathway and an
+            approval-likelihood score, from live NSW Planning Portal data.
+          </p>
+        </div>
+      </header>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-        <span className="text-neutral-500">House design (optional):</span>
-        <input
-          ref={fileInput}
-          type="file"
-          accept="application/pdf,image/png,image/jpeg,image/webp"
-          onChange={(e) => setDesignFile(e.target.files?.[0] ?? null)}
-          className="hidden"
-        />
-        <button
-          onClick={() => fileInput.current?.click()}
-          disabled={busy}
-          className="rounded border px-3 py-1.5 text-sm disabled:opacity-50"
-        >
-          {designFile ? "Change file" : "Upload plans"}
-        </button>
-        {designFile ? (
-          <>
-            <span className="truncate">{designFile.name}</span>
+      <main className="mx-auto -mt-10 w-full max-w-6xl flex-1 px-4 pb-12 sm:px-6">
+        <div className="card">
+          <label className="text-xs font-medium uppercase tracking-wide text-slate-500">Property address</label>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+            <AddressAutocomplete
+              className="w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm outline-none transition focus:border-brand-600 focus:ring-2 focus:ring-brand-100"
+              placeholder="Start typing an address, e.g. 60 Oakhill Drive, Castle Hill"
+              value={address}
+              onChange={setAddress}
+              onSelect={(picked) => (pickedAddress.current = picked)}
+              onSubmit={run}
+            />
             <button
-              onClick={() => {
-                setDesignFile(null);
-                if (fileInput.current) fileInput.current.value = "";
-              }}
-              disabled={busy}
-              className="text-xs text-neutral-500 underline"
+              onClick={run}
+              disabled={busy || !address.trim()}
+              className="shrink-0 rounded-lg bg-accent-500 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-accent-600 disabled:opacity-50"
             >
-              remove
+              {buttonLabel}
             </button>
-          </>
-        ) : (
-          <span className="text-xs text-neutral-500">PDF or image — floor plan, elevations, and ideally a site plan</span>
-        )}
-      </div>
-      <p className="mt-1 text-xs text-neutral-500">
-        Searches and uploaded plans are saved so we can improve the service. Don&apos;t upload plans you aren&apos;t
-        happy for us to keep.
-      </p>
-      {step === "design" && <p className="mt-2 text-xs text-neutral-500">Reading the drawings can take up to a minute.</p>}
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+          </div>
 
-      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
-        <div className="rounded border p-4">
-          {record ? (
-            <div className="space-y-6">
-              {designError && <p className="text-sm text-red-600">Design check: {designError}</p>}
-              {designResult && <DesignCheckResults result={designResult} />}
-              <ReportView record={record} designResult={designResult} />
-            </div>
-          ) : (
-            <p className="text-sm text-neutral-500">
-              Enter an address above (and optionally upload your house plans), then run the assessment to see the report.
+          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4 text-sm">
+            <span className="text-slate-600">House design (optional)</span>
+            <input
+              ref={fileInput}
+              type="file"
+              accept="application/pdf,image/png,image/jpeg,image/webp"
+              onChange={(e) => setDesignFile(e.target.files?.[0] ?? null)}
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInput.current?.click()}
+              disabled={busy}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+            >
+              {designFile ? "Change file" : "Upload plans"}
+            </button>
+            {designFile ? (
+              <>
+                <span className="truncate text-slate-700">{designFile.name}</span>
+                <button
+                  onClick={() => {
+                    setDesignFile(null);
+                    if (fileInput.current) fileInput.current.value = "";
+                  }}
+                  disabled={busy}
+                  className="text-xs text-slate-500 underline"
+                >
+                  remove
+                </button>
+              </>
+            ) : (
+              <span className="text-xs text-slate-500">PDF or image — floor plan, elevations, and ideally a site plan</span>
+            )}
+          </div>
+          {busy && (
+            <p className="mt-3 flex items-center gap-2 text-sm text-brand-700">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" />
+              {step === "design" ? "Reading the drawings — this can take up to a minute." : "Checking live NSW planning data…"}
             </p>
           )}
+          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
         </div>
-        <div className="h-[600px]">
-          <ChatPanel record={record} />
+
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
+          <div className="min-w-0">
+            {record ? (
+              <div className="space-y-5">
+                {designError && <p className="card text-sm text-red-600">Design check: {designError}</p>}
+                {designResult && <DesignCheckResults result={designResult} />}
+                <ReportView record={record} designResult={designResult} />
+              </div>
+            ) : (
+              <div className="card">
+                <h2 className="section-title">How it works</h2>
+                <ol className="grid gap-4 text-sm sm:grid-cols-3">
+                  {[
+                    ["1", "Enter an address", "Pick from the NSW property register so the right lot is matched."],
+                    ["2", "We check the controls", "Zoning, lot size, FSR, height, heritage, bushfire, flood and more — live."],
+                    ["3", "Get your report", "Approval checklist, pathway (CDC or DA), score and next steps."],
+                  ].map(([n, title, text]) => (
+                    <li key={n} className="rounded-lg bg-slate-50 p-4">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-700">
+                        {n}
+                      </span>
+                      <p className="mt-2 font-medium text-slate-800">{title}</p>
+                      <p className="mt-1 text-slate-600">{text}</p>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+          </div>
+          <div className="h-[600px] lg:sticky lg:top-6">
+            <ChatPanel record={record} />
+          </div>
         </div>
-      </div>
+      </main>
+
+      <footer className="border-t border-slate-200 bg-white">
+        <div className="mx-auto max-w-6xl px-4 py-5 text-xs text-slate-500 sm:px-6">
+          Indicative only — not legal or planning advice. Verify with a Section 10.7 planning certificate before buying or
+          building.
+        </div>
+      </footer>
     </div>
   );
 }
