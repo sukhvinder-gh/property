@@ -55,8 +55,8 @@ function ScoreBreakdown({ score }: { score: AssessmentRecord["score"] }) {
   const available = score.factors.reduce((s, f) => s + f.weight, 0);
   const scaled = available > 0 && available < 100;
   return (
-    <div className="mt-5 border-t border-slate-100 pt-4">
-      <h4 className="font-semibold text-brand-900">How the score is calculated</h4>
+    <div>
+      <h3 className="section-title">How the score is calculated</h3>
       <p className="text-xs text-neutral-600">
         Each factor has a maximum number of points; the site earns some or all of them. The score is the sum.
       </p>
@@ -197,10 +197,11 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
       </header>
 
       <section className="card">
+        <ScoreBreakdown score={score} />
+      </section>
+
+      <section className="card">
         <ApprovalChecklist record={record} design={designResult ?? null} />
-        <p className="mt-3 text-xs text-slate-500">
-          See how the score is calculated in the Feasibility summary at the end of the report.
-        </p>
       </section>
 
       <section className="card">
@@ -568,7 +569,6 @@ export function ReportView({ record, designResult }: { record: AssessmentRecord;
           <span className="font-medium">Recommendation:</span> {recommendationLabel(record.feasibilitySummary.recommendation)}
         </p>
         <p className="mt-1 text-neutral-700">{record.feasibilitySummary.reasoning}</p>
-        <ScoreBreakdown score={score} />
       </section>
 
       <p className="px-1 text-xs text-slate-500">
